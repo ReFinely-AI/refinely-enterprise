@@ -1,0 +1,219 @@
+"""
+Reconciliation routes: bank accounts, file uploads, reconciliation processing.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from typing import List
+from app.core.database import get_db
+from app.models.user import User
+from app.models.organization import Membership
+from app.models.reconciliation import BankAccount, Reconciliation, BankTransaction, LedgerTransaction
+from app.schemas.reconciliation import (
+    BankAccountCreate, BankAccountResponse,
+    ReconciliationCreate, ReconciliationResponse,
+    FileUploadResponse
+)
+from app.api.deps import get_current_user
+from app.services.file_parser import parse_bank_file, parse_ledger_file
+
+router = APIRouter()
+
+
+# ============ Bank Accounts ============
+
+@router.post("/bank-accounts", response_model=BankAccountResponse, status_code=status.HTTP_201_CREATED)
+async def create_bank_account(
+    org_id: int,
+    account_data: BankAccountCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new bank account for reconciliation."""
+    
+    # Verify membership
+    result = await db.execute(
+        select(Membership)
+        .where(Membership.user_id == current_user.id)
+        .where(Membership.organization_id == org_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    
+    new_account = BankAccount(
+        organization_id=org_id,
+        **account_data.model_dump()
+    )
+    db.add(new_account)
+    await db.commit()
+    await db.refresh(new_account)
+    
+    return new_account
+
+
+@router.get("/bank-accounts", response_model=List[BankAccountResponse])
+async def list_bank_accounts(
+    org_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all bank accounts for an organization."""
+    
+    result = await db.execute(
+        select(BankAccount).where(BankAccount.organization_id == org_id)
+    )
+    return result.scalars().all()
+
+
+# ============ File Upload ============
+
+@router.post("/upload/bank", response_model=FileUploadResponse)
+async def upload_bank_file(
+    reconciliation_id: int = Form(...),
+    file: UploadFile = File(...),
+    date_column: str = Form("Date"),
+    amount_column: str = Form("Amount"),
+    description_column: str = Form("Description"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload and parse a bank statement file (CSV/Excel)."""
+    
+    # Verify reconciliation exists and user has access
+    result = await db.execute(
+        select(Reconciliation).where(Reconciliation.id == reconciliation_id)
+    )
+    reconciliation = result.scalar_one_or_none()
+    
+    if not reconciliation:
+        raise HTTPException(status_code=404, detail="Reconciliation not found")
+    
+    # Parse file
+    try:
+        transactions = await parse_bank_file(
+            file=file,
+            date_column=date_column,
+            amount_column=amount_column,
+            description_column=description_column
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"File parsing error: {str(e)}")
+    
+    # Save transactions to database
+    for tx_data in transactions:
+        tx = BankTransaction(
+            reconciliation_id=reconciliation_id,
+            transaction_date=tx_data["date"],
+            amount=tx_data["amount"],
+            description=tx_data.get("description"),
+            raw_data=str(tx_data)
+        )
+        db.add(tx)
+    
+    # Update reconciliation stats
+    reconciliation.total_bank_transactions = len(transactions)
+    
+    await db.commit()
+    
+    return FileUploadResponse(
+        message="Bank file uploaded successfully",
+        rows_parsed=len(transactions),
+        file_type="bank"
+    )
+
+
+@router.post("/upload/ledger", response_model=FileUploadResponse)
+async def upload_ledger_file(
+    reconciliation_id: int = Form(...),
+    file: UploadFile = File(...),
+    date_column: str = Form("Date"),
+    debit_column: str = Form("Debit"),
+    credit_column: str = Form("Credit"),
+    description_column: str = Form("Description"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload and parse a ledger file (CSV/Excel)."""
+    
+    result = await db.execute(
+        select(Reconciliation).where(Reconciliation.id == reconciliation_id)
+    )
+    reconciliation = result.scalar_one_or_none()
+    
+    if not reconciliation:
+        raise HTTPException(status_code=404, detail="Reconciliation not found")
+    
+    try:
+        transactions = await parse_ledger_file(
+            file=file,
+            date_column=date_column,
+            debit_column=debit_column,
+            credit_column=credit_column,
+            description_column=description_column
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"File parsing error: {str(e)}")
+    
+    for tx_data in transactions:
+        tx = LedgerTransaction(
+            reconciliation_id=reconciliation_id,
+            transaction_date=tx_data["date"],
+            debit=tx_data.get("debit", 0),
+            credit=tx_data.get("credit", 0),
+            description=tx_data.get("description"),
+            raw_data=str(tx_data)
+        )
+        db.add(tx)
+    
+    reconciliation.total_ledger_transactions = len(transactions)
+    
+    await db.commit()
+    
+    return FileUploadResponse(
+        message="Ledger file uploaded successfully",
+        rows_parsed=len(transactions),
+        file_type="ledger"
+    )
+
+
+# ============ Reconciliation Sessions ============
+
+@router.post("/", response_model=ReconciliationResponse, status_code=status.HTTP_201_CREATED)
+async def create_reconciliation(
+    recon_data: ReconciliationCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new reconciliation session."""
+    
+    new_recon = Reconciliation(
+        bank_account_id=recon_data.bank_account_id,
+        created_by_id=current_user.id,
+        period_start=recon_data.period_start,
+        period_end=recon_data.period_end
+    )
+    db.add(new_recon)
+    await db.commit()
+    await db.refresh(new_recon)
+    
+    return new_recon
+
+
+@router.get("/{recon_id}", response_model=ReconciliationResponse)
+async def get_reconciliation(
+    recon_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get reconciliation details."""
+    
+    result = await db.execute(
+        select(Reconciliation).where(Reconciliation.id == recon_id)
+    )
+    recon = result.scalar_one_or_none()
+    
+    if not recon:
+        raise HTTPException(status_code=404, detail="Reconciliation not found")
+    
+    return recon
