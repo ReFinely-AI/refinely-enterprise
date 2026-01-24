@@ -1,7 +1,7 @@
 import React from 'react';
-import { Card as UiCard } from '../ui/Card';
-import { Badge } from '../ui/Badge';
-import { Reconciliation } from '../../types/reconciliation';
+import { Card as UiCard } from './ui/Card';
+import { Badge } from './ui/Badge';
+import { Reconciliation } from './../types/reconciliation';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';

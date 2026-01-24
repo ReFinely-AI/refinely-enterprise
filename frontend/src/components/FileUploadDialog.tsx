@@ -13,11 +13,11 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
-import { Button } from '../ui/Button';
+import { Button } from './ui/Button';
 import { reconciliationService } from '../services/reconciliation';
 import { CloudUpload, CircleCheck } from 'lucide-react';
 
-// If you have a shared cn utility, import it instead of this.
+// Simple classnames helper
 const cn = (...classes: (string | false | null | undefined)[]) =>
   classes.filter(Boolean).join(' ');
 
@@ -28,7 +28,7 @@ interface Props {
   onFilesUploaded: () => void;
 }
 
-const FileUploadDialog: React.FC<Props> = ({
+export const FileUploadDialog: React.FC<Props> = ({
   open,
   reconciliationId,
   onClose,
@@ -81,14 +81,12 @@ const FileUploadDialog: React.FC<Props> = ({
     setSuccess(false);
 
     try {
-      // Upload bank file
       await reconciliationService.uploadBankFile(reconciliationId, bankFile, {
         date_column: 'Date',
         amount_column: 'Amount',
         description_column: 'Description',
       });
 
-      // Upload ledger file
       await reconciliationService.uploadLedgerFile(reconciliationId, ledgerFile, {
         date_column: 'Date',
         debit_column: 'Debit',
@@ -256,5 +254,3 @@ const FileUploadDialog: React.FC<Props> = ({
     </Dialog>
   );
 };
-
-export default FileUploadDialog;

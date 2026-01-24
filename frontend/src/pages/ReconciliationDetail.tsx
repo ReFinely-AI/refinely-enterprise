@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container, Box, Typography, Tabs, Tab, Chip, Grid,
-  Card, CardContent, LinearProgress, Alert, Button
+  Card, CardContent, LinearProgress, Alert, Button as MuiButton,
+  Paper,
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useAuth } from '../contexts/AuthContext';
 import { reconciliationService } from '../services/reconciliation';
-import { Reconciliation, Transaction } from '../../types/reconciliation';
+import { Reconciliation, Transaction } from '../types/reconciliation';
 import { FileUploadDialog } from '../components/FileUploadDialog';
-import { Export } from 'lucide-react';
+import { FileDown } from 'lucide-react';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -65,17 +66,27 @@ const ReconciliationDetail = () => {
     : 0;
 
   const bankColumns: GridColDef[] = [
-    { field: 'date', headerName: 'Date', width: 120, renderCell: (params) => new Date(params.value).toLocaleDateString() },
-    { field: 'description', headerName: 'Description', flex: 1, minWidth: 200 },
+    { 
+      field: 'date', 
+      headerName: 'Date', 
+      width: 120, 
+      renderCell: (params) => new Date(params.value).toLocaleDateString() 
+    },
+    { 
+      field: 'description', 
+      headerName: 'Description', 
+      flex: 1, 
+      minWidth: 200 
+    },
     { 
       field: 'amount', 
       headerName: 'Amount', 
       width: 120,
       renderCell: (params) => (
         <Chip 
-          label={`PKR ${params.value.toLocaleString()}`}
+          label={`PKR ${(params.value || 0).toLocaleString()}`}
           size="small"
-          color={params.value > 0 ? 'success' : 'error'}
+          color={(params.value || 0) > 0 ? 'success' : 'error'}
         />
       )
     },
@@ -161,13 +172,13 @@ const ReconciliationDetail = () => {
         }}>
           {reconciliation.status === 'pending' && !filesUploaded ? (
             <>
-              <Button 
-                variant="primary" 
-                size="lg"
+              <MuiButton 
+                variant="contained" 
+                color="primary"
                 onClick={() => setOpenUpload(true)}
               >
                 Upload Bank & Ledger Files
-              </Button>
+              </MuiButton>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 Step 1 of 3: Upload transaction files to begin matching
               </Typography>
@@ -238,13 +249,13 @@ const ReconciliationDetail = () => {
       {/* Export Button */}
       {reconciliation.status === 'completed' && (
         <Box sx={{ mt: 4, textAlign: 'right' }}>
-          <Button 
-            variant="secondary" 
-            startIcon={<Export size={20} />}
-            size="lg"
+          <MuiButton 
+            variant="outlined"
+            startIcon={<FileDown size={20} />}
+            size="large"
           >
             Export Reconciliation Report
-          </Button>
+          </MuiButton>
         </Box>
       )}
 

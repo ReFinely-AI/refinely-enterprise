@@ -3,9 +3,9 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Stepper, Step, StepLabel, Box, CircularProgress
 } from '@mui/material';
-import { BankAccount } from '../../types/reconciliation';
-import { Button } from '../ui/Button';
-import { reconciliationService } from '../../services/reconciliation';
+import { BankAccount } from './../types/reconciliation';
+import { Button } from './ui/Button';
+import { reconciliationService } from './../services/reconciliation';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
