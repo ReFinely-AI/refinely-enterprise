@@ -1,5 +1,11 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import axios, { AxiosError } from 'axios';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from 'react';
+import axios from 'axios';
 import { User } from '../types/auth';
 
 interface AuthContextType {
@@ -25,64 +31,96 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 1) Setup axios baseURL and token header
   useEffect(() => {
-    const initAuth = async () => {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+    axios.defaults.baseURL = base;
+
+    // If a token was already in localStorage, attach it
+    const savedToken = localStorage.getItem('token');
+    if (savedToken) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+      setToken(savedToken);
+    }
+  }, []);
+
+  // 2) On first load, if token exists, fetch user
+  useEffect(() => {
+    const bootstrap = async () => {
       const savedToken = localStorage.getItem('token');
       if (savedToken) {
         try {
           await refetchUser(savedToken);
         } catch {
+          // token invalid → clear everything
           localStorage.removeItem('token');
+          setUser(null);
+          setToken(null);
         }
       }
       setIsLoading(false);
     };
-    initAuth();
+    bootstrap();
   }, []);
 
-  const refetchUser = async (currentToken?: string) => {
-    const tokenToUse = currentToken || localStorage.getItem('token');
+  // Helper to set token in state + axios + localStorage
+  const applyToken = (accessToken: string) => {
+    localStorage.setItem('token', accessToken);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+    setToken(accessToken);
+  };
+
+  // 3) Fetch current user
+  const refetchUser = async (tokenOverride?: string) => {
+    const tokenToUse = tokenOverride || localStorage.getItem('token');
     if (!tokenToUse) throw new Error('No token');
 
-    const response = await axios.get(`${import.meta.env.VITE_API_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${tokenToUse}` }
-    });
+    applyToken(tokenToUse);
 
-    const userData = response.data;
-    setUser(userData);
-    setToken(tokenToUse);
-    localStorage.setItem('token', tokenToUse);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${tokenToUse}`;
+    const res = await axios.get('/auth/me');
+    setUser(res.data);
   };
 
+  // 4) Login
   const login = async (email: string, password: string) => {
-    const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, { email, password });
-    await refetchUser(response.data.access_token);
+    const res = await axios.post('/auth/login', { email, password });
+    const accessToken: string = res.data.access_token;
+    applyToken(accessToken);
+    await refetchUser(accessToken);
   };
 
+  // 5) Register (auto-login)
   const register = async (data: RegisterData) => {
-    const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/register`, data);
-    await refetchUser(response.data.access_token);
+    const res = await axios.post('/auth/register', data);
+    const accessToken: string = res.data.access_token;
+    applyToken(accessToken);
+    await refetchUser(accessToken);
   };
 
+  // 6) Logout
   const logout = () => {
     setUser(null);
     setToken(null);
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
+    window.location.href = '/login';
   };
 
-  return (
-    <AuthContext.Provider value={{
-      user, token, isLoading, login, register, logout, refetchUser
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value: AuthContextType = {
+    user,
+    token,
+    isLoading,
+    login,
+    register,
+    logout,
+    refetchUser,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 };

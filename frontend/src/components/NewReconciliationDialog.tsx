@@ -1,3 +1,4 @@
+import { FileText } from 'lucide-react';
 import React, { useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions,
