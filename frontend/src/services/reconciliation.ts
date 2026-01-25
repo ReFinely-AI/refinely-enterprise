@@ -1,42 +1,36 @@
-import axios from 'axios';
+import { apiClient } from '../contexts/AuthContext';
 import { Organization, BankAccount, Reconciliation } from '../types/reconciliation';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-
-const api = axios.create({
-  baseURL: API_URL,
-});
-
 // Organizations
-export const getOrganizations = async (): Promise<Organization[]> => {
-  const res = await api.get('/organizations/');
+const getOrganizations = async (): Promise<Organization[]> => {
+  const res = await apiClient.get('/organizations/');
   return res.data;
 };
 
 // Bank accounts
-export const getBankAccounts = async (orgId: number): Promise<BankAccount[]> => {
-  const res = await api.get(`/reconciliations/bank-accounts?org_id=${orgId}`);
+const getBankAccounts = async (orgId: number): Promise<BankAccount[]> => {
+  const res = await apiClient.get(`/reconciliations/bank-accounts?org_id=${orgId}`);
   return res.data;
 };
 
-export const createReconciliation = async (data: {
+const createReconciliation = async (data: {
   bank_account_id: number;
   period_start: string;
   period_end: string;
 }): Promise<Reconciliation> => {
-  const res = await api.post('/reconciliations/', data);
+  const res = await apiClient.post('/reconciliations/', data);
   return res.data;
 };
 
-export const getReconciliation = async (id: number): Promise<Reconciliation> => {
-  const res = await api.get(`/reconciliations/${id}`);
+const getReconciliation = async (id: number): Promise<Reconciliation> => {
+  const res = await apiClient.get(`/reconciliations/${id}`);
   return res.data;
 };
 
-export const uploadBankFile = async (
+const uploadBankFile = async (
   reconciliationId: number,
   file: File,
-  mapping: { date_column: string; amount_column: string; description_column?: string; },
+  mapping: { date_column: string; amount_column: string; description_column?: string }
 ) => {
   const formData = new FormData();
   formData.append('reconciliation_id', reconciliationId.toString());
@@ -47,16 +41,21 @@ export const uploadBankFile = async (
     formData.append('description_column', mapping.description_column);
   }
 
-  const res = await api.post('/reconciliations/upload/bank', formData, {
+  const res = await apiClient.post('/reconciliations/upload/bank', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return res.data;
 };
 
-export const uploadLedgerFile = async (
+const uploadLedgerFile = async (
   reconciliationId: number,
   file: File,
-  mapping: { date_column: string; debit_column: string; credit_column: string; description_column?: string; },
+  mapping: {
+    date_column: string;
+    debit_column: string;
+    credit_column: string;
+    description_column?: string;
+  }
 ) => {
   const formData = new FormData();
   formData.append('reconciliation_id', reconciliationId.toString());
@@ -68,7 +67,7 @@ export const uploadLedgerFile = async (
     formData.append('description_column', mapping.description_column);
   }
 
-  const res = await api.post('/reconciliations/upload/ledger', formData, {
+  const res = await apiClient.post('/reconciliations/upload/ledger', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return res.data;
