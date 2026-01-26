@@ -8,6 +8,7 @@ import React, {
 import axios from 'axios';
 import { User } from '../types/auth';
 
+// ---------- TYPES ----------
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -24,85 +25,97 @@ interface RegisterData {
   full_name?: string;
 }
 
+// ---------- GLOBAL AXIOS CLIENT ----------
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+
+// This client will be used everywhere (auth + reconciliation)
+export const apiClient = axios.create({
+  baseURL: API_URL,
+});
+
+// Attach token automatically from localStorage
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// ---------- PROVIDER ----------
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1) Setup axios baseURL and token header
-  useEffect(() => {
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-    axios.defaults.baseURL = base;
-
-    // If a token was already in localStorage, attach it
-    const savedToken = localStorage.getItem('token');
-    if (savedToken) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-      setToken(savedToken);
+  // Helper to set token everywhere
+  const applyToken = (accessToken: string | null) => {
+    if (accessToken) {
+      localStorage.setItem('token', accessToken);
+      setToken(accessToken);
+    } else {
+      localStorage.removeItem('token');
+      setToken(null);
     }
-  }, []);
+  };
 
-  // 2) On first load, if token exists, fetch user
+  // Bootstrap: if token in localStorage, load user
   useEffect(() => {
-    const bootstrap = async () => {
-      const savedToken = localStorage.getItem('token');
-      if (savedToken) {
+    const init = async () => {
+      const saved = localStorage.getItem('token');
+      if (saved) {
         try {
-          await refetchUser(savedToken);
-        } catch {
-          // token invalid → clear everything
-          localStorage.removeItem('token');
+          applyToken(saved);
+          const res = await apiClient.get('/auth/me');
+          setUser(res.data);
+        } catch (err) {
+          console.error('Bootstrap auth failed, clearing token', err);
+          applyToken(null);
           setUser(null);
-          setToken(null);
         }
       }
       setIsLoading(false);
     };
-    bootstrap();
+    init();
   }, []);
 
-  // Helper to set token in state + axios + localStorage
-  const applyToken = (accessToken: string) => {
-    localStorage.setItem('token', accessToken);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
-    setToken(accessToken);
-  };
+  // Explicit refetch
+  const refetchUser = async () => {
+    const current = localStorage.getItem('token');
+    if (!current) throw new Error('No token');
 
-  // 3) Fetch current user
-  const refetchUser = async (tokenOverride?: string) => {
-    const tokenToUse = tokenOverride || localStorage.getItem('token');
-    if (!tokenToUse) throw new Error('No token');
-
-    applyToken(tokenToUse);
-
-    const res = await axios.get('/auth/me');
+    const res = await apiClient.get('/auth/me');
     setUser(res.data);
+    applyToken(current);
   };
 
-  // 4) Login
+  // Login
   const login = async (email: string, password: string) => {
-    const res = await axios.post('/auth/login', { email, password });
+    const res = await apiClient.post('/auth/login', { email, password });
     const accessToken: string = res.data.access_token;
     applyToken(accessToken);
-    await refetchUser(accessToken);
+
+    const me = await apiClient.get('/auth/me');
+    setUser(me.data);
   };
 
-  // 5) Register (auto-login)
+  // Register
   const register = async (data: RegisterData) => {
-    const res = await axios.post('/auth/register', data);
+    const res = await apiClient.post('/auth/register', data);
     const accessToken: string = res.data.access_token;
     applyToken(accessToken);
-    await refetchUser(accessToken);
+
+    const me = await apiClient.get('/auth/me');
+    setUser(me.data);
   };
 
-  // 6) Logout
+  // Logout
   const logout = () => {
+    applyToken(null);
     setUser(null);
-    setToken(null);
-    localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
     window.location.href = '/login';
   };
 
@@ -119,6 +132,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+// ---------- HOOK ----------
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
