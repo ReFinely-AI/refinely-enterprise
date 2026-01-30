@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.dependencies.auth import get_current_user
+from app.api.deps import get_current_user
 from app.models.transaction import (
     Reconciliation,
     BankAccount,
@@ -27,7 +27,7 @@ from app.services.matching_engine import run_matching
 
 router = APIRouter(
     prefix="/reconciliations",
-    tags=["reconciliations"],
+    tags=["Reconciliations"],
 )
 
 # ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ def run_reconciliation_matching(
                 bank_transaction_id=m["bank_transaction_id"],
                 ledger_transaction_id=m["ledger_transaction_id"],
                 match_type=m["match_type"],
-                confidence_score=m["confidence"],
+                confidence=m["confidence"],       # model field is `confidence`
                 audit_trail=m["audit_trail"],
             )
         )

@@ -3,7 +3,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey, JSON, DateTim
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
-from app.core.database import Base  # adjust if your Base is elsewhere
+from app.core.database import Base
 
 
 class Match(Base):
