@@ -6,26 +6,34 @@ interface AppLayoutProps {
   sidebar?: React.ReactNode;
 }
 
-export const AppLayout = ({ children, sidebar }: AppLayoutProps) => {
+const AppLayout: React.FC<AppLayoutProps> = ({ children, sidebar }) => {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  
+
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#FAFBFC' }}>
       {!isMobile && sidebar && (
-        <Box 
-          component="aside" 
-          sx={{ 
-            width: 280, 
-            borderRight: '1px solid #E5E7EB', 
-            bgcolor: 'white' 
+        <Box
+          component="aside"
+          sx={{
+            width: 280,
+            borderRight: '1px solid #E5E7EB',
+            bgcolor: 'white',
           }}
         >
           {sidebar}
         </Box>
       )}
-      <Box component="main" sx={{ flexGrow: 1, overflow: 'auto' }}>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          overflow: 'auto',
+        }}
+      >
         {children}
       </Box>
     </Box>
   );
 };
+
+export default AppLayout;

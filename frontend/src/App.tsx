@@ -1,8 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { 
-  CssBaseline, 
-  ThemeProvider, 
+import {
+  CssBaseline,
+  ThemeProvider,
   createTheme,
   Box,
   CircularProgress,
@@ -12,7 +12,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import ReconciliationDetail from './pages/ReconciliationDetail';
-
 
 // Query client for data fetching
 const queryClient = new QueryClient();
@@ -42,8 +41,8 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        }
-      }
+        },
+      },
     },
     MuiButton: {
       styleOverrides: {
@@ -51,28 +50,30 @@ const theme = createTheme({
           borderRadius: 8,
           textTransform: 'none',
           fontWeight: 500,
-        }
-      }
-    }
-  }
+        },
+      },
+    },
+  },
 });
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
-  
+
   if (isLoading) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        minHeight: '100vh' 
-      }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+        }}
+      >
         <CircularProgress />
       </Box>
     );
   }
-  
+
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
@@ -82,22 +83,23 @@ function AppContent() {
       <CssBaseline />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route 
-          path="/dashboard" 
+        <Route
+          path="/dashboard"
           element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reconciliation/:id" 
+        <Route
+          path="/reconciliations/:id"
           element={
             <ProtectedRoute>
               <ReconciliationDetail />
             </ProtectedRoute>
-          } 
+          }
         />
+        {/* Default redirects */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

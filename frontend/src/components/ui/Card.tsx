@@ -4,36 +4,33 @@ import { cn } from '../../utils';
 interface CardProps {
   children: ReactNode;
   className?: string;
-  header?: ReactNode;     // Top section (title, actions)
-  footer?: ReactNode;     // Bottom section (buttons)
+  header?: ReactNode;
+  footer?: ReactNode;
   variant?: 'default' | 'elevated';
 }
 
-export const Card = ({ 
-  children, 
-  className, 
-  header, 
-  footer, 
-  variant = 'default' 
-}: CardProps) => (
-  <div className={cn(
-    'bg-white rounded-2xl border border-gray-200 overflow-hidden',
-    variant === 'elevated' && 'shadow-lg hover:shadow-xl transition-shadow',
-    className
-  )}>
-    {/* Header */}
+const Card: React.FC<CardProps> = ({
+  children,
+  className,
+  header,
+  footer,
+  variant = 'default',
+}) => (
+  <div
+    className={cn(
+      'bg-white rounded-2xl border border-gray-200 overflow-hidden',
+      variant === 'elevated' && 'shadow-lg hover:shadow-xl transition-shadow',
+      className,
+    )}
+  >
     {header && (
       <div className="p-6 pb-4 border-b border-gray-100">
         {header}
       </div>
     )}
-    
-    {/* Content */}
-    <div className="p-6">
-      {children}
-    </div>
-    
-    {/* Footer */}
+
+    <div className="p-6">{children}</div>
+
     {footer && (
       <div className="p-6 pt-4 bg-gray-50 border-t border-gray-100">
         {footer}
@@ -41,3 +38,6 @@ export const Card = ({
     )}
   </div>
 );
+
+export { Card };
+export type { CardProps };

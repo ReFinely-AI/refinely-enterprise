@@ -9,6 +9,12 @@ import axios from 'axios';
 import { User } from '../types/auth';
 
 // ---------- TYPES ----------
+interface RegisterData {
+  email: string;
+  password: string;
+  full_name?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -17,12 +23,8 @@ interface AuthContextType {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   refetchUser: () => Promise<void>;
-}
-
-interface RegisterData {
-  email: string;
-  password: string;
-  full_name?: string;
+  activeOrgId: number | null;
+  setActiveOrgId: (orgId: number | null) => void;
 }
 
 // ---------- GLOBAL AXIOS CLIENT ----------
@@ -38,7 +40,7 @@ apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
     config.headers = config.headers || {};
-    config.headers.Authorization = `Bearer ${token}`;
+    (config.headers as any).Authorization = `Bearer ${token}`;
   }
   return config;
 });
@@ -50,6 +52,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeOrgId, setActiveOrgIdState] = useState<number | null>(null);
 
   // Helper to set token everywhere
   const applyToken = (accessToken: string | null) => {
@@ -62,13 +65,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Bootstrap: if token in localStorage, load user
+  const setActiveOrgId = (orgId: number | null) => {
+    if (orgId !== null) {
+      localStorage.setItem('activeOrgId', String(orgId));
+    } else {
+      localStorage.removeItem('activeOrgId');
+    }
+    setActiveOrgIdState(orgId);
+  };
+
+  // Bootstrap: if token in localStorage, load user and active org
   useEffect(() => {
     const init = async () => {
-      const saved = localStorage.getItem('token');
-      if (saved) {
+      const savedToken = localStorage.getItem('token');
+      const savedOrgId = localStorage.getItem('activeOrgId');
+
+      if (savedOrgId) {
+        const parsed = Number(savedOrgId);
+        if (!Number.isNaN(parsed)) {
+          setActiveOrgIdState(parsed);
+        }
+      }
+
+      if (savedToken) {
         try {
-          applyToken(saved);
+          applyToken(savedToken);
           const res = await apiClient.get('/auth/me');
           setUser(res.data);
         } catch (err) {
@@ -77,9 +98,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(null);
         }
       }
+
       setIsLoading(false);
     };
-    init();
+    void init();
   }, []);
 
   // Explicit refetch
@@ -116,6 +138,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = () => {
     applyToken(null);
     setUser(null);
+    setActiveOrgId(null);
     window.location.href = '/login';
   };
 
@@ -127,6 +150,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     register,
     logout,
     refetchUser,
+    activeOrgId,
+    setActiveOrgId,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,12 +1,20 @@
 import { FileText } from 'lucide-react';
 import React, { useState } from 'react';
 import {
-  Dialog, DialogTitle, DialogContent, DialogActions,
-  Stepper, Step, StepLabel, Box, CircularProgress
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Stepper,
+  Step,
+  StepLabel,
+  Box,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
-import { BankAccount } from './../types/reconciliation';
+import { BankAccount, Reconciliation } from '../types/reconciliation';
 import { Button } from './ui/Button';
-import { reconciliationService } from './../services/reconciliation';
+import { reconciliationService } from '../services/reconciliation';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -15,13 +23,17 @@ interface Props {
   open: boolean;
   onClose: () => void;
   bankAccounts: BankAccount[];
-  onCreated: () => void;
+  // changed: pass created reconciliation back
+  onCreated: (recon: Reconciliation) => void;
 }
 
 const steps = ['Select Bank Account', 'Set Date Range', 'Review & Create'];
 
 const NewReconciliationDialog: React.FC<Props> = ({
-  open, onClose, bankAccounts, onCreated
+  open,
+  onClose,
+  bankAccounts,
+  onCreated,
 }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [bankAccountId, setBankAccountId] = useState('');
@@ -39,26 +51,27 @@ const NewReconciliationDialog: React.FC<Props> = ({
       setError('Please select date range');
       return;
     }
-    setActiveStep(activeStep + 1);
+    setActiveStep((prev) => prev + 1);
     setError('');
   };
 
   const handleCreate = async () => {
     if (!bankAccountId || !startDate || !endDate) return;
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
-      await reconciliationService.createReconciliation({
-        bank_account_id: parseInt(bankAccountId),
+      const recon = await reconciliationService.createReconciliation({
+        bank_account_id: parseInt(bankAccountId, 10),
         period_start: startDate.toISOString().split('T')[0],
-        period_end: endDate.toISOString().split('T')[0]
+        period_end: endDate.toISOString().split('T')[0],
       });
-      onCreated();
+
+      onCreated(recon);  // <<< send recon with id
       onClose();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create reconciliation');
+      setError(err?.response?.data?.detail || 'Failed to create reconciliation');
     } finally {
       setLoading(false);
     }
@@ -75,7 +88,7 @@ const NewReconciliationDialog: React.FC<Props> = ({
               className="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">Select bank account</option>
-              {bankAccounts.map(account => (
+              {bankAccounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.account_name} ({account.bank_name})
                 </option>
@@ -90,13 +103,13 @@ const NewReconciliationDialog: React.FC<Props> = ({
               <DatePicker
                 label="Start Date"
                 value={startDate}
-                onChange={setStartDate}
+                onChange={(value) => setStartDate(value)}
                 slotProps={{ textField: { fullWidth: true, size: 'small' } }}
               />
               <DatePicker
                 label="End Date"
                 value={endDate}
-                onChange={setEndDate}
+                onChange={(value) => setEndDate(value)}
                 slotProps={{ textField: { fullWidth: true, size: 'small' } }}
               />
             </Box>
@@ -109,7 +122,11 @@ const NewReconciliationDialog: React.FC<Props> = ({
               <div className="flex justify-between">
                 <span>Bank Account:</span>
                 <span className="font-medium">
-                  {bankAccounts.find(a => a.id === parseInt(bankAccountId))?.account_name}
+                  {
+                    bankAccounts.find(
+                      (a) => a.id === parseInt(bankAccountId, 10),
+                    )?.account_name
+                  }
                 </span>
               </div>
               <div className="flex justify-between">
@@ -132,14 +149,14 @@ const NewReconciliationDialog: React.FC<Props> = ({
         <FileText size={20} />
         New Reconciliation
       </DialogTitle>
-      
+
       <DialogContent>
         {error && (
           <Alert severity="error" sx={{ mt: 1, mb: 2 }}>
             {error}
           </Alert>
         )}
-        
+
         <Stepper activeStep={activeStep} sx={{ mt: 2 }}>
           {steps.map((label) => (
             <Step key={label}>
@@ -147,35 +164,23 @@ const NewReconciliationDialog: React.FC<Props> = ({
             </Step>
           ))}
         </Stepper>
-        
-        <div className="mt-6">
-          {getStepContent(activeStep)}
-        </div>
+
+        <div className="mt-6">{getStepContent(activeStep)}</div>
       </DialogContent>
-      
+
       <DialogActions sx={{ p: 3 }}>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={onClose}
-          disabled={loading}
-        >
+        <Button variant="outline" size="sm" onClick={onClose} disabled={loading}>
           Cancel
         </Button>
-        
+
         {activeStep < steps.length - 1 ? (
-          <Button 
-            variant="primary" 
-            size="sm" 
-            onClick={handleNext}
-            disabled={loading}
-          >
+          <Button variant="primary" size="sm" onClick={handleNext} disabled={loading}>
             Next
           </Button>
         ) : (
-          <Button 
-            variant="primary" 
-            size="md" 
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleCreate}
             disabled={loading || !bankAccountId || !startDate || !endDate}
           >

@@ -13,6 +13,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useDropzone } from 'react-dropzone';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from './ui/Button';
 import { reconciliationService } from '../services/reconciliation';
 import { CloudUpload, CircleCheck } from 'lucide-react';
@@ -28,7 +29,7 @@ interface Props {
   onFilesUploaded: () => void;
 }
 
-export const FileUploadDialog: React.FC<Props> = ({
+const FileUploadDialog: React.FC<Props> = ({
   open,
   reconciliationId,
   onClose,
@@ -40,7 +41,32 @@ export const FileUploadDialog: React.FC<Props> = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const queryClient = useQueryClient();
+
+  const uploadBankMutation = useMutation({
+    mutationFn: (file: File) =>
+      reconciliationService.uploadBankFile(reconciliationId, file, {
+        date_column: 'Date',
+        amount_column: 'Amount',
+        description_column: 'Description',
+      }),
+  });
+
+  const uploadLedgerMutation = useMutation({
+    mutationFn: (file: File) =>
+      reconciliationService.uploadLedgerFile(reconciliationId, file, {
+        date_column: 'Date',
+        debit_column: 'Debit',
+        credit_column: 'Credit',
+        description_column: 'Description',
+      }),
+  });
+
+  const {
+    getRootProps,
+    getInputProps,
+    isDragActive,
+  } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
         setBankFile(acceptedFiles[0]);
@@ -81,18 +107,16 @@ export const FileUploadDialog: React.FC<Props> = ({
     setSuccess(false);
 
     try {
-      await reconciliationService.uploadBankFile(reconciliationId, bankFile, {
-        date_column: 'Date',
-        amount_column: 'Amount',
-        description_column: 'Description',
-      });
+      await uploadBankMutation.mutateAsync(bankFile);
+      await uploadLedgerMutation.mutateAsync(ledgerFile);
 
-      await reconciliationService.uploadLedgerFile(reconciliationId, ledgerFile, {
-        date_column: 'Date',
-        debit_column: 'Debit',
-        credit_column: 'Credit',
-        description_column: 'Description',
-      });
+      // Refresh reconciliation + transactions so UI updates immediately
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reconciliation', reconciliationId] }),
+        queryClient.invalidateQueries({
+          queryKey: ['reconciliation-transactions', reconciliationId],
+        }),
+      ]);
 
       setSuccess(true);
       setTimeout(() => {
@@ -108,9 +132,11 @@ export const FileUploadDialog: React.FC<Props> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle className="flex items-center gap-2">
-        <CloudUpload size={24} />
-        Upload Transaction Files
+      <DialogTitle>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CloudUpload size={24} />
+          <Typography variant="h6">Upload Transaction Files</Typography>
+        </Box>
       </DialogTitle>
 
       <DialogContent sx={{ p: 0 }}>
@@ -122,9 +148,21 @@ export const FileUploadDialog: React.FC<Props> = ({
 
         {success ? (
           <Box sx={{ p: 6, textAlign: 'center' }}>
-            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Box
+              sx={{
+                width: 64,
+                height: 64,
+                bgcolor: 'green.100',
+                borderRadius: 3,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mx: 'auto',
+                mb: 2,
+              }}
+            >
               <CircleCheck className="w-8 h-8 text-green-600" />
-            </div>
+            </Box>
             <Typography variant="h6" gutterBottom>
               Files uploaded successfully!
             </Typography>
@@ -254,3 +292,5 @@ export const FileUploadDialog: React.FC<Props> = ({
     </Dialog>
   );
 };
+
+export default FileUploadDialog;
