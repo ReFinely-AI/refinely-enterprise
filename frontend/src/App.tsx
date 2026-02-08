@@ -1,3 +1,4 @@
+// src/App.tsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import {
@@ -10,8 +11,12 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
+import SignUp from './pages/SignUp';
 import Dashboard from './pages/Dashboard';
 import ReconciliationDetail from './pages/ReconciliationDetail';
+import OrganizationsPage from './pages/Organizations';
+import BankAccountsPage from './pages/BankAccounts';
+import ReconciliationsPage from './pages/Reconciliations';
 
 // Query client for data fetching
 const queryClient = new QueryClient();
@@ -82,12 +87,40 @@ function AppContent() {
     <BrowserRouter>
       <CssBaseline />
       <Routes>
+        {/* Auth */}
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
+
+        {/* Main app */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/organizations"
+          element={
+            <ProtectedRoute>
+              <OrganizationsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bank-accounts"
+          element={
+            <ProtectedRoute>
+              <BankAccountsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/reconciliations"
+          element={
+            <ProtectedRoute>
+              <ReconciliationsPage />
             </ProtectedRoute>
           }
         />
@@ -99,6 +132,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+
         {/* Default redirects */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -1,7 +1,14 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Box, List, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material';
-import { LayoutDashboard, Banknote, ListChecks } from 'lucide-react';
+import {
+  Box,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Typography,
+} from '@mui/material';
+import { LayoutDashboard, Banknote, ListChecks, Building2 } from 'lucide-react';
 
 const Sidebar: React.FC = () => {
   const location = useLocation();
@@ -9,9 +16,9 @@ const Sidebar: React.FC = () => {
 
   const items = [
     { label: 'Dashboard', icon: <LayoutDashboard size={18} />, to: '/dashboard' },
-    // future: separate bank-accounts route if desired
-    { label: 'Reconciliations', icon: <ListChecks size={18} />, to: '/dashboard' },
-    { label: 'Bank Accounts', icon: <Banknote size={18} />, to: '/dashboard' },
+    { label: 'Organizations', icon: <Building2 size={18} />, to: '/organizations' },
+    { label: 'Bank Accounts', icon: <Banknote size={18} />, to: '/bank-accounts' },
+    { label: 'Reconciliations', icon: <ListChecks size={18} />, to: '/reconciliations' },
   ];
 
   return (
@@ -39,7 +46,12 @@ const Sidebar: React.FC = () => {
                 },
               }}
             >
-              <ListItemIcon sx={{ minWidth: 32, color: active ? '#1D4ED8' : '#6B7280' }}>
+              <ListItemIcon
+                sx={{
+                  minWidth: 32,
+                  color: active ? '#1D4ED8' : '#6B7280',
+                }}
+              >
                 {item.icon}
               </ListItemIcon>
               <ListItemText

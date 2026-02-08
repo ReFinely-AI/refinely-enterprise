@@ -9,7 +9,6 @@ import {
   Chip,
   Paper,
   Grid,
-  CardContent,
   LinearProgress,
   Alert,
   TextField,
@@ -18,9 +17,14 @@ import {
   DialogContent,
   DialogActions,
   Divider,
-  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  MenuItem,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
   reconciliationService,
@@ -29,19 +33,8 @@ import {
   Reconciliation,
 } from '../services/reconciliation';
 import { Button } from '../components/ui/Button';
-import { Card as UiCard } from '../components/ui/Card';
 import NewReconciliationDialog from '../components/NewReconciliationDialog';
-import {
-  TrendingUp,
-  AlertCircle,
-  Plus,
-  Building2,
-  Banknote,
-  FileText,
-  PlayCircle,
-  Bell,
-  Search,
-} from 'lucide-react';
+import { TrendingUp, Plus, Search } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { user, logout, activeOrgId, setActiveOrgId } = useAuth();
@@ -57,7 +50,6 @@ const Dashboard: React.FC = () => {
   const [openNewBank, setOpenNewBank] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // New org/bank form state
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgCurrency, setNewOrgCurrency] = useState('PKR');
   const [newBankName, setNewBankName] = useState('');
@@ -111,7 +103,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // --- Create Organization ---
   const handleCreateOrganization = async () => {
     if (!newOrgName.trim()) {
       setCreationError('Organization name is required');
@@ -136,7 +127,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // --- Create Bank Account ---
   const handleCreateBankAccount = async () => {
     if (!selectedOrg) {
       setCreationError('Select or create an organization first');
@@ -168,7 +158,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // --- After New Reconciliation created from dialog ---
   const handleReconciliationCreated = (recon: Reconciliation) => {
     setLastReconciliation(recon);
     setOpenNewRecon(false);
@@ -183,7 +172,7 @@ const Dashboard: React.FC = () => {
           justifyContent: 'center',
           alignItems: 'center',
           height: '100vh',
-          bgcolor: '#020617',
+          bgcolor: '#F5F7FA',
         }}
       >
         <LinearProgress sx={{ width: 400 }} />
@@ -191,9 +180,8 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const matchRate = 87; // placeholder
+  const matchRate = 87;
   const anomalies = 3;
-  const hasOrg = organizations.length > 0;
   const hasBankAccounts = bankAccounts.length > 0;
 
   const latestNeedsSetup =
@@ -201,166 +189,71 @@ const Dashboard: React.FC = () => {
     (lastReconciliation.total_bank_transactions === 0 ||
       lastReconciliation.total_ledger_transactions === 0);
 
+  const handleOrgSelect = (orgId: number) => {
+    const org = organizations.find((o) => o.id === orgId) || null;
+    setSelectedOrg(org);
+    setActiveOrgId(orgId);
+    if (org) {
+      void loadBankAccounts(org.id);
+    }
+  };
+
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#020617' }}>
-      {/* Left sidebar */}
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F5F7FA', color: '#343C6A' }}>
+      {/* Left sidebar with real navigation */}
       <Box
         sx={{
-          width: 248,
-          bgcolor: '#020617',
-          borderRight: '1px solid rgba(15,23,42,0.9)',
-          color: 'rgba(248,250,252,0.9)',
+          width: 250,
+          bgcolor: '#FFFFFF',
+          borderRight: '1px solid #E6EFF5',
           display: 'flex',
           flexDirection: 'column',
-          pt: 3,
-          pb: 4,
+          py: 3,
         }}
       >
         {/* Logo */}
         <Box sx={{ px: 3, display: 'flex', alignItems: 'center', mb: 4 }}>
-          <Box
+          <img
+            src="/dashboard-logo.png"
+            alt="Refinely logo"
+            style={{ width: 36, height: 36, marginRight: 12 }}
+          />
+          <Typography
             sx={{
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              border: '2px solid #22d3ee',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mr: 1.5,
+              fontFamily: 'var(--font-roboto-slab)',
+              fontSize: 24,
+              fontWeight: 500,
             }}
           >
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              R
-            </Typography>
-          </Box>
-          <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-              ReFinely
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(148,163,184,0.9)' }}>
-              AI Reconciliation
-            </Typography>
-          </Box>
+            Refinely
+          </Typography>
         </Box>
 
-        {/* Main nav */}
-        <Box sx={{ px: 2 }}>
-          <Typography
-            variant="caption"
-            sx={{ textTransform: 'uppercase', letterSpacing: 1, color: '#64748b' }}
-          >
-            Main
-          </Typography>
-
-          <Box
-            sx={{
-              mt: 1.5,
-              mb: 2,
-              p: 1.3,
-              borderRadius: 2.5,
-              background:
-                'linear-gradient(135deg, rgba(56,189,248,0.2), rgba(129,140,248,0.18))',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
-            }}
-          >
-            <Box
-              sx={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                bgcolor: 'rgba(15,23,42,0.85)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#38bdf8',
-              }}
-            >
-              <TrendingUp size={18} />
-            </Box>
-            <Box>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                Overview
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(226,232,240,0.8)' }}>
-                Reconciliation workspace
-              </Typography>
-            </Box>
-          </Box>
-
-          <Typography
-            variant="caption"
-            sx={{
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-              color: '#64748b',
-            }}
-          >
-            Entities
-          </Typography>
-          <Box sx={{ mt: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Chip
-              icon={<Building2 size={14} />}
-              label="Organizations"
-              variant="outlined"
-              size="small"
-              sx={{
-                borderColor: 'rgba(51,65,85,0.9)',
-                color: 'rgba(226,232,240,0.9)',
-                '& .MuiChip-icon': { color: '#38bdf8' },
-                borderRadius: 999,
-              }}
-            />
-            <Chip
-              icon={<Banknote size={14} />}
-              label="Bank Accounts"
-              variant="outlined"
-              size="small"
-              sx={{
-                borderColor: 'rgba(51,65,85,0.9)',
-                color: 'rgba(226,232,240,0.9)',
-                '& .MuiChip-icon': { color: '#22c55e' },
-                borderRadius: 999,
-              }}
-            />
-            <Chip
-              icon={<FileText size={14} />}
-              label="Reconciliations"
-              variant="outlined"
-              size="small"
-              sx={{
-                borderColor: 'rgba(51,65,85,0.9)',
-                color: 'rgba(226,232,240,0.9)',
-                '& .MuiChip-icon': { color: '#a855f7' },
-                borderRadius: 999,
-              }}
-            />
-          </Box>
+        {/* Nav items */}
+        <Box sx={{ px: 3 }}>
+          <NavItem label="Dashboard" to="/dashboard" />
+          <NavItem label="Organizations" to="/organizations" />
+          <NavItem label="Accounts" to="/bank-accounts" />
+          <NavItem label="Reconciliations" to="/reconciliations" />
+          <NavItem label="Matching" />
+          <NavItem label="Anomalies" />
+          <NavItem label="Assistant" />
         </Box>
 
         <Box sx={{ flexGrow: 1 }} />
 
         {/* User footer */}
-        <Box sx={{ px: 3 }}>
-          <Divider sx={{ borderColor: 'rgba(30,64,175,0.8)', mb: 2 }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Avatar
-              sx={{
-                width: 32,
-                height: 32,
-                bgcolor: '#1d4ed8',
-                fontSize: 14,
-              }}
-            >
+        <Box sx={{ px: 3, pb: 2 }}>
+          <Divider sx={{ mb: 2 }} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+            <Avatar sx={{ width: 32, height: 32 }}>
               {user?.full_name?.[0] || 'U'}
             </Avatar>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
                 {user?.full_name || 'User'}
               </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(148,163,184,0.9)' }}>
+              <Typography variant="caption" sx={{ color: '#8BA3CB' }}>
                 {selectedOrg?.name || 'No organization'}
               </Typography>
             </Box>
@@ -369,12 +262,7 @@ const Dashboard: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={logout}
-            sx={{
-              mt: 2,
-              width: '100%',
-              borderColor: 'rgba(51,65,85,0.9)',
-              color: 'rgba(248,250,252,0.9)',
-            }}
+            sx={{ width: '100%', borderColor: '#E6EFF5', color: '#343C6A' }}
           >
             Logout
           </Button>
@@ -382,68 +270,61 @@ const Dashboard: React.FC = () => {
       </Box>
 
       {/* Right main content */}
-      <Box sx={{ flexGrow: 1, bgcolor: 'radial-gradient(circle at top, #020617, #020617 40%, #020617)' }}>
-        {/* Top bar */}
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Top bar with org switcher */}
         <AppBar
           position="static"
           elevation={0}
           sx={{
-            background: 'linear-gradient(90deg, #020617, #020617)',
-            borderBottom: '1px solid rgba(15,23,42,0.9)',
+            bgcolor: '#FFFFFF',
+            color: '#343C6A',
+            borderBottom: '1px solid #E6EFF5',
           }}
         >
-          <Toolbar sx={{ justifyContent: 'space-between', minHeight: 64 }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: '#e5e7eb' }}>
+          <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', minHeight: 80 }}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 600 }}>
                 Overview
               </Typography>
-              <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                Monitor reconciliations, anomalies and data health.
-              </Typography>
+              {selectedOrg && (
+                <Typography variant="body2" sx={{ color: '#8BA3CB' }}>
+                  Working in: {selectedOrg.name} ({selectedOrg.currency || 'PKR'})
+                </Typography>
+              )}
             </Box>
 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <TextField
+                select
+                size="small"
+                label="Organization"
+                value={selectedOrg ? selectedOrg.id : ''}
+                onChange={(e) => handleOrgSelect(Number(e.target.value))}
+                sx={{ minWidth: 220 }}
+              >
+                {organizations.map((org) => (
+                  <MenuItem key={org.id} value={org.id}>
+                    {org.name} ({org.currency || 'PKR'})
+                  </MenuItem>
+                ))}
+              </TextField>
+
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  px: 1.5,
-                  py: 0.7,
+                  px: 2.5,
+                  py: 1,
                   borderRadius: 999,
-                  bgcolor: '#020617',
-                  border: '1px solid rgba(31,41,55,0.9)',
-                  color: '#6b7280',
-                  fontSize: 13,
-                  minWidth: 200,
+                  bgcolor: '#F5F7FA',
+                  minWidth: 220,
+                  color: '#8BA3CB',
+                  fontSize: 14,
                 }}
               >
-                <Search size={16} />
-                <Typography sx={{ ml: 1 }}>Search reconciliations</Typography>
+                <Search size={18} />
+                <Typography sx={{ ml: 1 }}>Search for something</Typography>
               </Box>
-
-              {selectedOrg && (
-                <Chip
-                  label={selectedOrg.name}
-                  size="small"
-                  sx={{
-                    height: 30,
-                    bgcolor: 'rgba(37,99,235,0.3)',
-                    color: '#e5e7eb',
-                    borderRadius: 999,
-                  }}
-                />
-              )}
-
-              <IconButton
-                size="small"
-                sx={{
-                  bgcolor: 'rgba(15,23,42,0.9)',
-                  border: '1px solid rgba(51,65,85,0.9)',
-                  color: '#9ca3af',
-                }}
-              >
-                <Bell size={16} />
-              </IconButton>
 
               <Button
                 variant="primary"
@@ -451,6 +332,12 @@ const Dashboard: React.FC = () => {
                 icon={<Plus size={16} />}
                 onClick={() => setOpenNewRecon(true)}
                 disabled={!hasBankAccounts}
+                sx={{
+                  borderRadius: 999,
+                  px: 3,
+                  bgcolor: '#1814F3',
+                  '&:hover': { bgcolor: '#0f0cc7' },
+                }}
               >
                 New Reconciliation
               </Button>
@@ -458,435 +345,195 @@ const Dashboard: React.FC = () => {
           </Toolbar>
         </AppBar>
 
-        <Container maxWidth="xl" sx={{ mt: 4, pb: 6 }}>
-          {/* Getting started + latest + fake activity */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} md={8}>
-              <Paper
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: 'rgba(15,23,42,0.96)',
-                  border: '1px solid rgba(30,64,175,0.7)',
-                  boxShadow: '0 18px 45px rgba(15,23,42,0.9)',
-                }}
-              >
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2.5 }}>
-                  <Typography variant="subtitle1" sx={{ color: '#e5e7eb', fontWeight: 600 }}>
-                    Getting started
-                  </Typography>
-                  <Chip
-                    label={
-                      hasOrg
-                        ? hasBankAccounts
-                          ? 'Ready to reconcile'
-                          : 'Add bank account'
-                        : 'Create organization'
-                    }
-                    size="small"
-                    sx={{
-                      height: 26,
-                      bgcolor: hasOrg && hasBankAccounts ? '#14532d' : '#1d4ed8',
-                      color: '#e5e7eb',
-                      borderRadius: 999,
-                    }}
-                  />
-                </Box>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
-                    <Box sx={{ display: 'flex', gap: 1.5 }}>
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: '50%',
-                          bgcolor: 'rgba(37,99,235,0.18)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#60a5fa',
-                        }}
-                      >
-                        <Building2 size={18} />
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" sx={{ color: '#e5e7eb', fontWeight: 600 }}>
-                          1. Organization
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                          Create or select your company entity.
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Box sx={{ display: 'flex', gap: 1.5 }}>
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: '50%',
-                          bgcolor: 'rgba(45,212,191,0.15)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#22c55e',
-                        }}
-                      >
-                        <Banknote size={18} />
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" sx={{ color: '#e5e7eb', fontWeight: 600 }}>
-                          2. Bank Account
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                          Add the account to reconcile.
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Box sx={{ display: 'flex', gap: 1.5 }}>
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: '50%',
-                          bgcolor: 'rgba(168,85,247,0.2)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#a855f7',
-                        }}
-                      >
-                        <FileText size={18} />
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" sx={{ color: '#e5e7eb', fontWeight: 600 }}>
-                          3. Reconciliation
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                          Upload CSVs, run matching, review anomalies.
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </Grid>
-                </Grid>
-
-                <Box sx={{ mt: 3, display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon={<Plus size={16} />}
-                    onClick={() => setOpenNewOrg(true)}
-                  >
-                    New Organization
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    icon={<Plus size={16} />}
-                    onClick={() => setOpenNewBank(true)}
-                    disabled={!hasOrg}
-                  >
-                    New Bank Account
-                  </Button>
-                </Box>
-              </Paper>
+        {/* Content area */}
+        <Box sx={{ flexGrow: 1, bgcolor: '#F5F7FA', p: 3 }}>
+          <Container maxWidth="lg" sx={{ px: 0 }}>
+            {/* KPI cards */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6} md={3}>
+                <MetricCard
+                  label="Reconciliation"
+                  value="1,248"
+                  iconBg="#FFE0F0"
+                  iconColor="#FF5C8D"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <MetricCard
+                  label="Unmatched Amount"
+                  value="$12,750"
+                  iconBg="#FFF4DE"
+                  iconColor="#FFA500"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <MetricCard
+                  label="Anomalies"
+                  value={anomalies.toString()}
+                  iconBg="#E2F4FF"
+                  iconColor="#2D60FF"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <MetricCard
+                  label="Match rate"
+                  value={`${matchRate}%`}
+                  iconBg="#E6FFF4"
+                  iconColor="#16A34A"
+                />
+              </Grid>
             </Grid>
 
-            <Grid item xs={12} md={4}>
-              <Paper
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: 'rgba(15,23,42,0.96)',
-                  border: '1px solid rgba(30,64,175,0.6)',
-                  mb: 2,
-                }}
-              >
-                <Typography variant="subtitle1" sx={{ color: '#e5e7eb', mb: 1, fontWeight: 600 }}>
-                  Latest Reconciliation
-                </Typography>
-                {!lastReconciliation ? (
-                  <Typography variant="body2" sx={{ color: '#9ca3af' }}>
-                    No reconciliations yet. Create one to start automated matching.
-                  </Typography>
-                ) : (
-                  <>
-                    <Typography variant="body2" sx={{ color: '#e5e7eb', fontWeight: 600 }}>
-                      #{lastReconciliation.id} • {lastReconciliation.status}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                      Period {lastReconciliation.period_start} → {lastReconciliation.period_end}
-                    </Typography>
-
-                    {latestNeedsSetup ? (
-                      <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                        Upload bank and ledger CSV files, then run the matching engine.
-                      </Alert>
-                    ) : (
-                      <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
-                        Files uploaded. Open the reconciliation screen to review matches.
-                      </Alert>
-                    )}
-
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={<PlayCircle size={16} />}
-                      onClick={() => navigate(`/reconciliations/${lastReconciliation.id}`)}
-                    >
-                      Open Matching Engine
-                    </Button>
-                  </>
-                )}
-              </Paper>
-
-              {/* Simple fake recent activity list for visual richness */}
-              <Paper
-                sx={{
-                  p: 2.5,
-                  borderRadius: 3,
-                  bgcolor: 'rgba(15,23,42,0.96)',
-                  border: '1px solid rgba(30,64,175,0.45)',
-                }}
-              >
-                <Typography
-                  variant="subtitle2"
-                  sx={{ color: '#e5e7eb', mb: 1.5, fontWeight: 600 }}
-                >
-                  Recent activity
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="caption" sx={{ color: '#e5e7eb' }}>
-                      New bank account added
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                      5 min ago
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="caption" sx={{ color: '#e5e7eb' }}>
-                      Reconciliation session created
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                      18 min ago
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography variant="caption" sx={{ color: '#e5e7eb' }}>
-                      2 anomalies marked as resolved
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                      1 hr ago
-                    </Typography>
-                  </Box>
-                </Box>
-              </Paper>
-            </Grid>
-          </Grid>
-
-          {/* Metrics row */}
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid item xs={12} md={3}>
-              <UiCard>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                    Average Match Rate
-                  </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.5 }}>
-                    {matchRate}%
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={matchRate}
-                    sx={{
-                      mt: 2,
-                      height: 8,
-                      borderRadius: 4,
-                      bgcolor: '#e5e7eb',
-                    }}
-                  />
-                </CardContent>
-              </UiCard>
-            </Grid>
-
-            <Grid item xs={12} md={3}>
-              <UiCard>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                    Active Anomalies
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5, gap: 1 }}>
-                    <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                      {anomalies}
-                    </Typography>
-                    <AlertCircle size={18} color="#f97316" />
-                  </Box>
-                </CardContent>
-              </UiCard>
-            </Grid>
-
-            <Grid item xs={12} md={3}>
-              <UiCard>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                    Bank Accounts
-                  </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.5 }}>
-                    {bankAccounts.length}
-                  </Typography>
-                </CardContent>
-              </UiCard>
-            </Grid>
-
-            <Grid item xs={12} md={3}>
-              <UiCard>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                    Organizations
-                  </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 700, mt: 0.5 }}>
-                    {organizations.length}
-                  </Typography>
-                </CardContent>
-              </UiCard>
-            </Grid>
-          </Grid>
-
-          {/* Organizations + bank accounts */}
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <Paper
-                sx={{
-                  p: 3,
-                  borderRadius: 3,
-                  bgcolor: 'rgba(15,23,42,0.96)',
-                  border: '1px solid rgba(30,64,175,0.6)',
-                  mb: 3,
-                }}
-              >
-                <Box
+            {/* Charts row */}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} md={8}>
+                <Paper
                   sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
+                    borderRadius: 3,
+                    p: 2.5,
+                    bgcolor: '#FFFFFF',
+                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
                   }}
                 >
-                  <Typography variant="subtitle1" sx={{ color: '#e5e7eb', fontWeight: 600 }}>
-                    Organizations
+                  <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
+                    Cash Balance Over Time
                   </Typography>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={<Plus size={14} />}
-                    onClick={() => setOpenNewOrg(true)}
-                  >
-                    Add
-                  </Button>
-                </Box>
-
-                {organizations.length === 0 ? (
-                  <Alert severity="info">
-                    No organizations yet. Create one to start configuring accounts.
-                  </Alert>
-                ) : (
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    {organizations.map((org) => (
-                      <Chip
-                        key={org.id}
-                        label={`${org.name} • ${org.currency}`}
-                        onClick={() => {
-                          setSelectedOrg(org);
-                          setActiveOrgId(org.id);
-                          void loadBankAccounts(org.id);
-                        }}
-                        clickable
-                        sx={{
-                          height: 34,
-                          fontSize: '0.8rem',
-                          borderRadius: 999,
-                          bgcolor:
-                            selectedOrg?.id === org.id
-                              ? 'rgba(37,99,235,0.95)'
-                              : 'rgba(15,23,42,0.9)',
-                          color: '#e5e7eb',
-                          border:
-                            selectedOrg?.id === org.id
-                              ? 'none'
-                              : '1px solid rgba(148,163,184,0.6)',
-                        }}
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <UiCard
-                header={
                   <Box
                     sx={{
+                      height: 260,
+                      borderRadius: 3,
+                      bgcolor: 'linear-gradient(180deg,#F8FAFC,#EFF3FF)',
+                      border: '1px solid #EFF3F9',
+                    }}
+                  />
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper
+                  sx={{
+                    borderRadius: 3,
+                    p: 2.5,
+                    bgcolor: '#FFFFFF',
+                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+                  }}
+                >
+                  <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
+                    Anomalies by Type
+                  </Typography>
+                  <Box
+                    sx={{
+                      height: 260,
                       display: 'flex',
-                      justifyContent: 'space-between',
                       alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                   >
-                    <Typography variant="subtitle1">Bank Accounts</Typography>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      icon={<Plus size={14} />}
-                      onClick={() => setOpenNewBank(true)}
-                      disabled={!hasOrg}
+                    <Box
+                      sx={{
+                        width: 170,
+                        height: 170,
+                        borderRadius: '50%',
+                        background:
+                          'conic-gradient(#2D60FF 0 110deg,#FFB020 110deg 210deg,#FF5C8D 210deg 280deg,#10B981 280deg 360deg)',
+                        position: 'relative',
+                      }}
                     >
-                      Add
-                    </Button>
-                  </Box>
-                }
-              >
-                {bankAccounts.length === 0 ? (
-                  <Alert severity="info">
-                    No bank accounts for this organization. Add one to start reconciling.
-                  </Alert>
-                ) : (
-                  <Box sx={{ maxHeight: 320, overflow: 'auto' }}>
-                    {bankAccounts.map((account) => (
                       <Box
-                        key={account.id}
                         sx={{
-                          p: 2.5,
-                          border: '1px solid #e5e7eb',
-                          borderRadius: 2,
-                          mb: 1.5,
-                          '&:hover': { backgroundColor: '#f9fafb' },
+                          position: 'absolute',
+                          inset: 26,
+                          borderRadius: '50%',
+                          bgcolor: '#FFFFFF',
                         }}
-                      >
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          {account.account_name}
-                        </Typography>
-                        <Chip
-                          label={account.bank_name || '—'}
-                          size="small"
-                          sx={{ mt: 0.5, mb: 0.5 }}
-                        />
-                        <Typography variant="caption" sx={{ color: '#6b7280' }}>
-                          {account.currency} • {account.date_tolerance_days}d tolerance
-                        </Typography>
-                      </Box>
-                    ))}
+                      />
+                    </Box>
+                    <Box sx={{ ml: 2 }}>
+                      <LegendDot color="#2D60FF" label="Fraud" />
+                      <LegendDot color="#FF5C8D" label="Duplicate" />
+                      <LegendDot color="#FFB020" label="Timing" />
+                      <LegendDot color="#10B981" label="Other" />
+                    </Box>
                   </Box>
-                )}
-              </UiCard>
+                </Paper>
+              </Grid>
             </Grid>
-          </Grid>
 
-          {/* New Reconciliation Dialog */}
+            {/* Recent reconciliations table */}
+            <Paper
+              sx={{
+                borderRadius: 3,
+                p: 2.5,
+                bgcolor: '#FFFFFF',
+                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+              }}
+            >
+              <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
+                Recent Reconciliations
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Description</TableCell>
+                    <TableCell>Transaction ID</TableCell>
+                    <TableCell>Entity</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Date</TableCell>
+                    <TableCell align="right">Amount</TableCell>
+                    <TableCell>Receipt</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <RecentRow
+                    description="Spotify Subscription"
+                    id="#12548796"
+                    entity="Shopping"
+                    status="Matched"
+                    date="28 Jan, 12:30 AM"
+                    amount="- $2,500"
+                    positive={false}
+                  />
+                  <RecentRow
+                    description="Freepik Sales"
+                    id="#12548796"
+                    entity="Transfer"
+                    status="Unmatch"
+                    date="25 Jan, 10:40 PM"
+                    amount="+ $750"
+                    positive
+                  />
+                  <RecentRow
+                    description="Mobile Service"
+                    id="#12548796"
+                    entity="Service"
+                    status="Matched"
+                    date="20 Jan, 10:40 PM"
+                    amount="- $150"
+                    positive={false}
+                  />
+                  <RecentRow
+                    description="Wilson"
+                    id="#12548796"
+                    entity="Transfer"
+                    status="Matched"
+                    date="18 Jan, 03:29 PM"
+                    amount="- $1,050"
+                    positive={false}
+                  />
+                  <RecentRow
+                    description="Emily"
+                    id="#12548796"
+                    entity="Transfer"
+                    status="Anomaly"
+                    date="14 Jan, 10:14 PM"
+                    amount="+ $840"
+                    positive
+                  />
+                </TableBody>
+              </Table>
+            </Paper>
+          </Container>
+
+          {/* Dialogs */}
           <NewReconciliationDialog
             open={openNewRecon}
             bankAccounts={bankAccounts}
@@ -894,7 +541,6 @@ const Dashboard: React.FC = () => {
             onCreated={handleReconciliationCreated}
           />
 
-          {/* New Organization Dialog */}
           <Dialog open={openNewOrg} onClose={() => setOpenNewOrg(false)} maxWidth="sm" fullWidth>
             <DialogTitle>New Organization</DialogTitle>
             <DialogContent>
@@ -934,7 +580,6 @@ const Dashboard: React.FC = () => {
             </DialogActions>
           </Dialog>
 
-          {/* New Bank Account Dialog */}
           <Dialog open={openNewBank} onClose={() => setOpenNewBank(false)} maxWidth="sm" fullWidth>
             <DialogTitle>New Bank Account</DialogTitle>
             <DialogContent>
@@ -991,9 +636,167 @@ const Dashboard: React.FC = () => {
               </Button>
             </DialogActions>
           </Dialog>
-        </Container>
+        </Box>
       </Box>
     </Box>
+  );
+};
+
+/* --- Small presentational helpers --- */
+
+interface NavItemProps {
+  label: string;
+  to?: string;
+}
+
+const NavItem: React.FC<NavItemProps> = ({ label, to }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isActive = to ? location.pathname.startsWith(to) : false;
+
+  return (
+    <Box
+      onClick={to ? () => navigate(to) : undefined}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        height: 44,
+        borderRadius: 999,
+        px: 2.5,
+        mb: 1,
+        bgcolor: isActive ? '#2D60FF' : 'transparent',
+        color: isActive ? '#FFFFFF' : '#B1B1B1',
+        cursor: to ? 'pointer' : 'default',
+        fontSize: 15,
+        fontWeight: isActive ? 600 : 500,
+        transition: 'background 0.15s',
+        '&:hover': {
+          bgcolor: to ? (isActive ? '#2448cc' : '#F5F7FA') : 'transparent',
+          color: to ? (isActive ? '#FFFFFF' : '#343C6A') : '#B1B1B1',
+        },
+      }}
+    >
+      <Box
+        sx={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          bgcolor: isActive ? '#FFFFFF' : '#D0D7E2',
+          mr: 1.5,
+        }}
+      />
+      {label}
+    </Box>
+  );
+};
+
+interface MetricCardProps {
+  label: string;
+  value: string;
+  iconBg: string;
+  iconColor: string;
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({ label, value, iconBg, iconColor }) => (
+  <Paper
+    sx={{
+      borderRadius: 3,
+      p: 2,
+      bgcolor: '#FFFFFF',
+      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    }}
+  >
+    <Box>
+      <Typography sx={{ fontSize: 14, color: '#8BA3CB' }}>{label}</Typography>
+      <Typography sx={{ fontSize: 22, fontWeight: 600, mt: 0.5 }}>{value}</Typography>
+    </Box>
+    <Box
+      sx={{
+        width: 46,
+        height: 46,
+        borderRadius: '50%',
+        bgcolor: iconBg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: iconColor,
+      }}
+    >
+      <TrendingUp size={20} />
+    </Box>
+  </Paper>
+);
+
+const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
+  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+    <Box
+      sx={{
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        bgcolor: color,
+        mr: 1,
+      }}
+    />
+    <Typography sx={{ fontSize: 13, color: '#8BA3CB' }}>{label}</Typography>
+  </Box>
+);
+
+interface RecentRowProps {
+  description: string;
+  id: string;
+  entity: string;
+  status: 'Matched' | 'Unmatch' | 'Anomaly';
+  date: string;
+  amount: string;
+  positive: boolean;
+}
+
+const RecentRow: React.FC<RecentRowProps> = ({
+  description,
+  id,
+  entity,
+  status,
+  date,
+  amount,
+  positive,
+}) => {
+  const statusColor =
+    status === 'Matched' ? '#16A34A' : status === 'Anomaly' ? '#EF4444' : '#F59E0B';
+  const statusBg =
+    status === 'Matched' ? '#E6FFF4' : status === 'Anomaly' ? '#FFE4E6' : '#FFF7E6';
+
+  return (
+    <TableRow sx={{ '&:last-child td': { borderBottom: 0 } }}>
+      <TableCell>{description}</TableCell>
+      <TableCell>{id}</TableCell>
+      <TableCell>{entity}</TableCell>
+      <TableCell>
+        <Chip
+          label={status}
+          size="small"
+          sx={{
+            bgcolor: statusBg,
+            color: statusColor,
+            fontSize: 12,
+            fontWeight: 500,
+          }}
+        />
+      </TableCell>
+      <TableCell>{date}</TableCell>
+      <TableCell align="right" sx={{ color: positive ? '#16A34A' : '#EF4444' }}>
+        {amount}
+      </TableCell>
+      <TableCell>
+        <Button variant="outline" size="xs">
+          Download
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 };
 

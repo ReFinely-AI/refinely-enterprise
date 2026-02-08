@@ -124,12 +124,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(me.data);
   };
 
-  // Register
+  // Register (then login to get JWT)
   const register = async (data: RegisterData) => {
-    const res = await apiClient.post('/auth/register', data);
-    const accessToken: string = res.data.access_token;
+    // 1) Create the user (no token returned)
+    await apiClient.post('/auth/register', data);
+
+    // 2) Immediately login to obtain access_token
+    const loginRes = await apiClient.post('/auth/login', {
+      email: data.email,
+      password: data.password,
+    });
+    const accessToken: string = loginRes.data.access_token;
     applyToken(accessToken);
 
+    // 3) Fetch current user profile
     const me = await apiClient.get('/auth/me');
     setUser(me.data);
   };

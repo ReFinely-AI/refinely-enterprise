@@ -1,8 +1,9 @@
-// src/pages/Login.tsx
+// src/pages/SignUp.tsx
 import React, { useState } from 'react';
 import {
   Container,
   TextField,
+  Paper,
   Typography,
   Box,
   Alert,
@@ -15,26 +16,39 @@ import { Button } from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-const Login: React.FC = () => {
-  const { login } = useAuth();
+const SignUp: React.FC = () => {
+  const { register } = useAuth();
   const navigate = useNavigate();
 
+  const [fullName, setFullName] = useState('');
+  const [orgName, setOrgName] = useState(''); // for now only UI, backend doesn’t use it yet
+  const [currency, setCurrency] = useState('PKR'); // UI only for now
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(false);
+  const [agree, setAgree] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+
+    if (!agree) {
+      setError('Please agree to the terms and policy');
+      return;
+    }
+
+    setLoading(true);
     try {
-      await login(email, password);
-      // you can persist remember flag later if needed
+      await register({
+        email,
+        password,
+        full_name: fullName || undefined,
+      });
+      // orgName + currency can be used later in onboarding / first organization API call
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Login failed');
+      setError(err?.response?.data?.detail || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -50,7 +64,7 @@ const Login: React.FC = () => {
       }}
     >
       <Grid container>
-        {/* Left column – login form */}
+        {/* Left column – form */}
         <Grid
           item
           xs={12}
@@ -64,10 +78,10 @@ const Login: React.FC = () => {
         >
           <Container maxWidth="sm">
             <Typography variant="h4" sx={{ fontWeight: 500, mb: 1 }}>
-              Welcome back!
+              Get started now
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-              Enter your credentials to access your account.
+              Create your ReFinely workspace for automated reconciliation and anomaly detection.
             </Typography>
 
             {error && (
@@ -79,11 +93,18 @@ const Login: React.FC = () => {
             <Box component="form" onSubmit={onSubmit} noValidate>
               <TextField
                 fullWidth
+                label="Full name"
+                margin="normal"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
+              <TextField
+                fullWidth
                 label="Email address"
                 type="email"
                 margin="normal"
                 required
-                autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -93,52 +114,45 @@ const Login: React.FC = () => {
                 type="password"
                 margin="normal"
                 required
-                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              <TextField
+                fullWidth
+                label="Organization name"
+                margin="normal"
+                value={orgName}
+                onChange={(e) => setOrgName(e.target.value)}
+                helperText="Used later when creating your first organization"
+              />
+              <TextField
+                fullWidth
+                label="Currency"
+                margin="normal"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                helperText="e.g. PKR, USD – stored in onboarding later"
+              />
 
-              <Box
-                sx={{
-                  mt: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={remember}
-                      onChange={(e) => setRemember(e.target.checked)}
-                      color="primary"
-                      size="small"
-                    />
-                  }
-                  label={
-                    <Typography variant="body2">
-                      Remember for 30 days
-                    </Typography>
-                  }
-                />
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={() => {
-                    // TODO: navigate to /forgot-password when implemented
-                  }}
-                  sx={{
-                    border: 'none',
-                    background: 'none',
-                    color: '#0C2A92',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    p: 0,
-                  }}
-                >
-                  forgot password
-                </Box>
-              </Box>
+              <FormControlLabel
+                sx={{ mt: 1 }}
+                control={
+                  <Checkbox
+                    checked={agree}
+                    onChange={(e) => setAgree(e.target.checked)}
+                    color="primary"
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="body2">
+                    I agree to the{' '}
+                    <Box component="span" sx={{ color: 'primary.main', fontWeight: 500 }}>
+                      terms &amp; policy
+                    </Box>
+                  </Typography>
+                }
+              />
 
               <Box sx={{ mt: 3 }}>
                 <Button
@@ -148,7 +162,7 @@ const Login: React.FC = () => {
                   loading={loading}
                   fullWidth
                 >
-                  Login
+                  Register
                 </Button>
               </Box>
 
@@ -166,7 +180,6 @@ const Login: React.FC = () => {
                 <Divider sx={{ flexGrow: 1 }} />
               </Box>
 
-              {/* Social buttons – visual only for now */}
               <Grid container spacing={1}>
                 <Grid item xs={12} sm={6}>
                   <Button type="button" variant="outline" size="sm" fullWidth>
@@ -182,11 +195,11 @@ const Login: React.FC = () => {
 
               <Box sx={{ mt: 3, textAlign: 'center' }}>
                 <Typography variant="body2">
-                  Don’t have an account?{' '}
+                  Have an account?{' '}
                   <Box
                     component="button"
                     type="button"
-                    onClick={() => navigate('/signup')}
+                    onClick={() => navigate('/login')}
                     sx={{
                       border: 'none',
                       background: 'none',
@@ -196,7 +209,7 @@ const Login: React.FC = () => {
                       p: 0,
                     }}
                   >
-                    Sign up
+                    Sign in
                   </Box>
                 </Typography>
               </Box>
@@ -204,7 +217,7 @@ const Login: React.FC = () => {
           </Container>
         </Grid>
 
-        {/* Right column – marketing copy (same as SignUp for consistency) */}
+        {/* Right column – marketing copy */}
         <Grid
           item
           xs={12}
@@ -233,4 +246,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+export default SignUp;
