@@ -22,16 +22,14 @@ async def create_organization(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new organization. Creator becomes admin."""
-    
-    # Create organization
+
     new_org = Organization(
         name=org_data.name,
         currency=org_data.currency
     )
     db.add(new_org)
-    await db.flush()  # Get the ID before committing
-    
-    # Add creator as admin member
+    await db.flush() 
+
     membership = Membership(
         user_id=current_user.id,
         organization_id=new_org.id,
@@ -69,8 +67,7 @@ async def get_organization(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific organization (must be a member)."""
-    
-    # Check membership
+
     result = await db.execute(
         select(Membership)
         .where(Membership.user_id == current_user.id)

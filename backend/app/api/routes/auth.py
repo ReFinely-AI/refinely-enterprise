@@ -18,7 +18,7 @@ router = APIRouter()
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user."""
     
-    # Check if email already exists
+
     result = await db.execute(select(User).where(User.email == user_data.email))
     existing_user = result.scalar_one_or_none()
     
@@ -27,8 +27,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    
-    # Create new user
+
     new_user = User(
         email=user_data.email,
         hashed_password=hash_password(user_data.password),
@@ -45,8 +44,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
 @router.post("/login", response_model=Token)
 async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     """Login and receive JWT token."""
-    
-    # Find user by email
+
     result = await db.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
     
@@ -62,7 +60,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Inactive user"
         )
     
-    # Create access token
+
     access_token = create_access_token(data={"sub": str(user.id)})
     
     return Token(access_token=access_token)

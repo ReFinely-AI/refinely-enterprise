@@ -152,7 +152,6 @@ async def upload_bank_file(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"File parsing error: {str(e)}")
 
-    # Bulk insert using ORM loop (simple, your counts are small)
     for tx_data in transactions:
         tx = BankTransaction(
             reconciliation_id=reconciliation_id,
