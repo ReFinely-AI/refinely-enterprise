@@ -8,17 +8,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
-# Sync engine (for Alembic migrations)
 engine = create_engine(settings.DATABASE_URL, echo=settings.DEBUG)
 
-# Async engine (for FastAPI endpoints)
 async_engine = create_async_engine(
     settings.ASYNC_DATABASE_URL,
     echo=settings.DEBUG,
     future=True
 )
 
-# Async session factory
+
 AsyncSessionLocal = sessionmaker(
     bind=async_engine,
     class_=AsyncSession,
@@ -27,7 +25,6 @@ AsyncSessionLocal = sessionmaker(
     autoflush=False
 )
 
-# Base class for all models
 Base = declarative_base()
 
 

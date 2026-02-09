@@ -3,12 +3,12 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    # Application
+
     APP_NAME: str = "ReFinely API"
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api/v1"
     
-    # Database
+
     DB_USER: str = "refinely_user"
     DB_PASSWORD: str = "refinely_secret"
     DB_HOST: str = "localhost"
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     def ASYNC_DATABASE_URL(self) -> str:
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
-    # JWT Authentication
+
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
