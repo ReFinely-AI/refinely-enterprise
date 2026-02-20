@@ -1,4 +1,3 @@
-# backend/app/services/matching_engine.py
 from datetime import date
 from typing import List, Dict, Any, Tuple
 from difflib import SequenceMatcher
@@ -14,7 +13,7 @@ DESC_FUZZY_THRESHOLD = 0.90          # high precision for finance
 def _amount_close(a: float, b: float) -> bool:
     if b == 0:
         return False
-    return abs(a - b) / abs(b) <= AMOUNT_TOLERANCE_PERCENT
+    return abs(float(a) - float(b)) / abs(float(b)) <= AMOUNT_TOLERANCE_PERCENT
 
 
 def _date_close(a: date, b: date) -> bool:
@@ -42,49 +41,58 @@ def run_matching(
     """
 
     used_ledger_ids = set()
+    used_bank_ids = set() 
     matches: List[Dict[str, Any]] = []
 
-    # Phase 1: exact amount + date
-    for b in bank_transactions:
-        for l in ledger_transactions:
-            if l.id in used_ledger_ids:
-                continue
+    
+    # 1. Build the lookup dictionary from ledger transactions
+    ledger_map = {}
+    for l in ledger_transactions:
+        l_amount = getattr(l, "amount", (l.debit or 0) - (l.credit or 0))
+        key = (l_amount, l.transaction_date)
+        if key not in ledger_map:
+            ledger_map[key] = []
+        ledger_map[key].append(l)
 
-            ledger_amount = getattr(l, "amount", (l.debit or 0) - (l.credit or 0))
-            if (
-                b.amount == ledger_amount
-                and _date_close(b.transaction_date, l.transaction_date)
-            ):
-                matches.append(
-                    {
-                        "reconciliation_id": reconciliation_id,
-                        "bank_transaction_id": b.id,
-                        "ledger_transaction_id": l.id,
-                        "match_type": "exact",
-                        "confidence": 1.0,
-                        "audit_trail": {
-                            "rule": "exact_amount_date",
-                            "bank_amount": b.amount,
-                            "ledger_amount": ledger_amount,
-                            "bank_date": b.transaction_date.isoformat(),
-                            "ledger_date": l.transaction_date.isoformat(),
-                        },
-                    }
-                )
-                used_ledger_ids.add(l.id)
-                break
-
-    # Phase 2: fuzzy amount + date
+    # 2. Fast single loop through bank transactions
     for b in bank_transactions:
-        if any(m["bank_transaction_id"] == b.id for m in matches):
+        key = (b.amount, b.transaction_date)
+        
+        # Instant dictionary lookup
+        if key in ledger_map and ledger_map[key]:
+            l = ledger_map[key].pop(0) # Take the first matching ledger item
+            
+            matches.append(
+                {
+                    "reconciliation_id": reconciliation_id,
+                    "bank_transaction_id": b.id,
+                    "ledger_transaction_id": l.id,
+                    "match_type": "exact",
+                    "confidence": 1.0,
+                    "audit_trail": {
+                        "rule": "exact_amount_date",
+                        "bank_amount": float(b.amount),
+                        "ledger_amount": float(key[0]),
+                        "bank_date": b.transaction_date.isoformat(),
+                        "ledger_date": l.transaction_date.isoformat(),
+                    },
+                }
+            )
+            used_ledger_ids.add(l.id)
+            used_bank_ids.add(b.id)
+
+    # Phase 2: FUZZY AMOUNT + DATE 
+    for b in bank_transactions:
+        # INSTANT check instead of slow inner loop
+        if b.id in used_bank_ids: 
             continue
+            
         for l in ledger_transactions:
             if l.id in used_ledger_ids:
                 continue
+                
             ledger_amount = getattr(l, "amount", (l.debit or 0) - (l.credit or 0))
-            if _amount_close(b.amount, ledger_amount) and _date_close(
-                b.transaction_date, l.transaction_date
-            ):
+            if _amount_close(b.amount, ledger_amount) and _date_close(b.transaction_date, l.transaction_date):
                 matches.append(
                     {
                         "reconciliation_id": reconciliation_id,
@@ -95,19 +103,21 @@ def run_matching(
                         "audit_trail": {
                             "rule": "fuzzy_amount_date",
                             "amount_tolerance_percent": AMOUNT_TOLERANCE_PERCENT,
-                            "bank_amount": b.amount,
-                            "ledger_amount": ledger_amount,
+                            "bank_amount": float(b.amount),
+                            "ledger_amount": float(ledger_amount),
                             "bank_date": b.transaction_date.isoformat(),
                             "ledger_date": l.transaction_date.isoformat(),
                         },
                     }
                 )
                 used_ledger_ids.add(l.id)
+                used_bank_ids.add(b.id)
                 break
 
-    # Phase 3: fuzzy description
+    # Phase 3: FUZZY DESCRIPTION
+
     for b in bank_transactions:
-        if any(m["bank_transaction_id"] == b.id for m in matches):
+        if b.id in used_bank_ids:
             continue
 
         best_l = None
@@ -122,9 +132,7 @@ def run_matching(
                 best_l = l
 
         if best_l and best_score >= DESC_FUZZY_THRESHOLD:
-            ledger_amount = getattr(
-                best_l, "amount", (best_l.debit or 0) - (best_l.credit or 0)
-            )
+            ledger_amount = getattr(best_l, "amount", (best_l.debit or 0) - (best_l.credit or 0))
             matches.append(
                 {
                     "reconciliation_id": reconciliation_id,
@@ -133,25 +141,23 @@ def run_matching(
                     "match_type": "fuzzy_desc",
                     "confidence": float(best_score),
                     "audit_trail": {
-                            "rule": "fuzzy_description",
-                            "threshold": DESC_FUZZY_THRESHOLD,
-                            "similarity": best_score,
-                            "bank_description": b.description,
-                            "ledger_description": best_l.description,
-                            "bank_amount": b.amount,
-                            "ledger_amount": ledger_amount,
+                        "rule": "fuzzy_description",
+                        "threshold": DESC_FUZZY_THRESHOLD,
+                        "similarity": best_score,
+                        "bank_description": b.description,
+                        "ledger_description": best_l.description,
+                        "bank_amount": float(b.amount),
+                        "ledger_amount": float(ledger_amount),
                     },
                 }
             )
             used_ledger_ids.add(best_l.id)
+            used_bank_ids.add(b.id)
 
     bank_ids = {b.id for b in bank_transactions}
     ledger_ids = {l.id for l in ledger_transactions}
 
-    matched_bank_ids = {m["bank_transaction_id"] for m in matches}
-    matched_ledger_ids = {m["ledger_transaction_id"] for m in matches}
-
-    unmatched_bank_ids = list(bank_ids - matched_bank_ids)
-    unmatched_ledger_ids = list(ledger_ids - matched_ledger_ids)
+    unmatched_bank_ids = list(bank_ids - used_bank_ids)
+    unmatched_ledger_ids = list(ledger_ids - used_ledger_ids)
 
     return matches, unmatched_bank_ids, unmatched_ledger_ids

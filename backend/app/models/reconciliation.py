@@ -13,6 +13,7 @@ from sqlalchemy import (
     Enum,
     Text,
     Boolean,
+    Numeric
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -133,8 +134,8 @@ class BankTransaction(Base):
     transaction_date = Column(Date, nullable=False)
     description = Column(Text, nullable=True)
     reference = Column(String(100), nullable=True)
-    amount = Column(Float, nullable=False)  # Positive = credit, Negative = debit
-    balance = Column(Float, nullable=True)
+    amount = Column(Numeric(15, 2), nullable=False)  # Positive = credit, Negative = debit
+    balance = Column(Numeric(15, 2), nullable=True)
 
     # Matching status
     is_matched = Column(Boolean, default=False)
@@ -168,8 +169,8 @@ class LedgerTransaction(Base):
     description = Column(Text, nullable=True)
     reference = Column(String(100), nullable=True)
     account_code = Column(String(50), nullable=True)
-    debit = Column(Float, default=0)
-    credit = Column(Float, default=0)
+    debit = Column(Numeric(15, 2), default=0)
+    credit = Column(Numeric(15, 2), default=0)
 
     @property
     def amount(self) -> float:

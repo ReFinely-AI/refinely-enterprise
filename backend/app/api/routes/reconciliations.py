@@ -3,6 +3,7 @@ from typing import List, Any, Dict, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+from fastapi.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.models.user import User
@@ -142,6 +143,14 @@ async def upload_bank_file(
     if not reconciliation:
         raise HTTPException(status_code=404, detail="Reconciliation not found")
 
+    # --- MEMORY PROTECTION: File Size Check ---
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
+    file.file.seek(0, 2)
+    if file.file.tell() > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Max size is 10MB.")
+    await file.seek(0)
+    # ------------------------------------------
+
     try:
         transactions = await parse_bank_file(
             file=file,
@@ -190,6 +199,14 @@ async def upload_ledger_file(
     reconciliation = result.scalar_one_or_none()
     if not reconciliation:
         raise HTTPException(status_code=404, detail="Reconciliation not found")
+
+    # --- MEMORY PROTECTION: File Size Check ---
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB limit
+    file.file.seek(0, 2)
+    if file.file.tell() > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Max size is 10MB.")
+    await file.seek(0)
+    # ------------------------------------------
 
     try:
         transactions = await parse_ledger_file(
@@ -311,12 +328,14 @@ async def run_reconciliation_matching(
         delete(Match).where(Match.reconciliation_id == rec.id)
     )
 
-    # Run engine (pure Python function)
-    match_dicts, unmatched_bank_ids, unmatched_ledger_ids = run_matching(
+    # --- BACKGROUND THREADING: Prevents server freeze ---
+    match_dicts, unmatched_bank_ids, unmatched_ledger_ids = await run_in_threadpool(
+        run_matching,
         reconciliation_id=rec.id,
         bank_transactions=bank_txs,
         ledger_transactions=ledger_txs,
     )
+    # ----------------------------------------------------
 
     match_models: List[Match] = []
     for m in match_dicts:

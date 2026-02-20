@@ -1,8 +1,8 @@
-# backend/app/schemas/transaction.py
+
 from pydantic import BaseModel
 from datetime import date, datetime
 from typing import Optional
-
+from decimal import Decimal
 
 class BankTransactionRead(BaseModel):
     id: int
@@ -10,8 +10,8 @@ class BankTransactionRead(BaseModel):
     transaction_date: date
     description: Optional[str]
     reference: Optional[str]
-    amount: float
-    balance: Optional[float]
+    amount: Decimal
+    balance: Optional[Decimal]
     is_matched: bool
     created_at: datetime
 
@@ -26,8 +26,8 @@ class LedgerTransactionRead(BaseModel):
     description: Optional[str]
     reference: Optional[str]
     account_code: Optional[str]
-    debit: float
-    credit: float
+    debit: Decimal
+    credit: Decimal
     is_matched: bool
     created_at: datetime
 
