@@ -1,5 +1,4 @@
 from typing import List, Any, Dict, Tuple
-
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -31,8 +30,8 @@ from app.schemas.match import MatchRead
 from app.api.deps import get_current_user
 from app.services.file_parser import parse_bank_file, parse_ledger_file
 from app.services.matching_engine import run_matching
-
-
+from app.services.anomaly_agent import run_anomaly_detection  # Imported Anomaly Agent
+from app.schemas.reconciliation import AnomalyRead
 router = APIRouter()
 
 async def _get_reconciliation_or_404(
@@ -79,7 +78,6 @@ async def _get_transactions_for_reconciliation(
     bank_txs = bank_result.scalars().all()
     ledger_txs = ledger_result.scalars().all()
     return bank_txs, ledger_txs
-
 
 
 @router.post(
@@ -240,7 +238,6 @@ async def upload_ledger_file(
     )
 
 
-
 @router.post(
     "/",
     response_model=ReconciliationResponse,
@@ -278,7 +275,6 @@ async def get_reconciliation_basic(
     if not recon:
         raise HTTPException(status_code=404, detail="Reconciliation not found")
     return recon
-
 
 
 @router.get(
@@ -323,39 +319,43 @@ async def run_reconciliation_matching(
     rec.total_bank_transactions = len(bank_txs)
     rec.total_ledger_transactions = len(ledger_txs)
 
-    # Clear old matches for this reconciliation
-    await db.execute(
-        delete(Match).where(Match.reconciliation_id == rec.id)
-    )
+    # 1. Clear old matches and anomalies for this reconciliation
+    await db.execute(delete(Match).where(Match.reconciliation_id == rec.id))
+    await db.execute(delete(Anomaly).where(Anomaly.reconciliation_id == rec.id))
 
-    # --- BACKGROUND THREADING: Prevents server freeze ---
+    # 2. --- RUN MATCHING ENGINE (Background Thread) ---
     match_dicts, unmatched_bank_ids, unmatched_ledger_ids = await run_in_threadpool(
         run_matching,
         reconciliation_id=rec.id,
         bank_transactions=bank_txs,
         ledger_transactions=ledger_txs,
     )
-    # ----------------------------------------------------
-
-    match_models: List[Match] = []
-    for m in match_dicts:
-        match_models.append(
-            Match(
-                reconciliation_id=rec.id,
-                bank_transaction_id=m["bank_transaction_id"],
-                ledger_transaction_id=m["ledger_transaction_id"],
-                match_type=m["match_type"],
-                confidence=m["confidence"],
-                audit_trail=m["audit_trail"],
-            )
-        )
-
+    
+    match_models = [Match(**m) for m in match_dicts]
     db.add_all(match_models)
 
     rec.matched_count = len(match_models)
     rec.unmatched_bank_count = len(unmatched_bank_ids)
     rec.unmatched_ledger_count = len(unmatched_ledger_ids)
+    
+    await db.commit() # Save matches first so Anomaly agent can see them if needed
 
+    # 3. --- RUN ANOMALY AGENT (Background Thread) ---
+    anomaly_dicts = await run_in_threadpool(
+        run_anomaly_detection,
+        reconciliation_id=rec.id,
+        bank_transactions=bank_txs,
+        ledger_transactions=ledger_txs,
+        matches=match_dicts
+    )
+
+    anomaly_models = [Anomaly(**a) for a in anomaly_dicts]
+    if anomaly_models:
+        db.add_all(anomaly_models)
+        
+    # Update the anomaly count dynamically
+    rec.anomaly_count = len(anomaly_models)
+    
     await db.commit()
     await db.refresh(rec)
 
@@ -364,6 +364,7 @@ async def run_reconciliation_matching(
         "matched_count": rec.matched_count,
         "unmatched_bank_count": rec.unmatched_bank_count,
         "unmatched_ledger_count": rec.unmatched_ledger_count,
+        "anomaly_count": rec.anomaly_count,
         "matches": [MatchRead.model_validate(m) for m in match_models],
         "unmatched_bank_ids": unmatched_bank_ids,
         "unmatched_ledger_ids": unmatched_ledger_ids,
@@ -389,3 +390,23 @@ async def get_reconciliation_matches(
     result = await db.execute(stmt)
     matches = result.scalars().all()
     return matches
+
+@router.get(
+    "/{reconciliation_id}/anomalies",
+    response_model=List[AnomalyRead],
+)
+async def get_reconciliation_anomalies(
+    reconciliation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch all detected anomalies for a reconciliation session."""
+    rec = await _get_reconciliation_or_404(db, reconciliation_id, current_user.id)
+
+    stmt = (
+        select(Anomaly)
+        .where(Anomaly.reconciliation_id == rec.id)
+        .order_by(Anomaly.severity.desc()) # Show HIGH severity first
+    )
+    result = await db.execute(stmt)
+    return result.scalars().all()

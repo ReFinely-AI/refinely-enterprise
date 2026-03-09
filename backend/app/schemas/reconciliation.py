@@ -81,3 +81,18 @@ class ColumnMapping(BaseModel):
     debit_column: Optional[str] = None
     credit_column: Optional[str] = None
     account_code_column: Optional[str] = None
+
+class AnomalyRead(BaseModel):
+    id: int
+    reconciliation_id: int
+    anomaly_type: str
+    severity: str
+    title: str
+    description: Optional[str]
+    suggested_action: Optional[str]
+    bank_transaction_id: Optional[int]
+    ledger_transaction_id: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
