@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from fastapi.concurrency import run_in_threadpool
-
+from datetime import datetime, timezone
 from app.core.database import get_db
 from app.models.user import User
 from app.models.organization import Membership
+from app.schemas.reconciliation import AnomalyResolveRequest
 from app.models.reconciliation import (
     BankAccount,
     Reconciliation,
@@ -410,3 +411,78 @@ async def get_reconciliation_anomalies(
     )
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+@router.post("/resolve-anomaly", response_model=AnomalyRead)
+async def resolve_anomaly(
+    resolution_data: AnomalyResolveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    The Automation Engine: Executes the Copilot's suggested actions to fix the database.
+    """
+    # 1. Fetch the Anomaly to ensure it exists and isn't already resolved
+    stmt = select(Anomaly).where(Anomaly.id == resolution_data.anomaly_id)
+    result = await db.execute(stmt)
+    anomaly = result.scalar_one_or_none()
+
+    if not anomaly:
+        raise HTTPException(status_code=404, detail="Anomaly not found")
+    if anomaly.is_resolved:
+        raise HTTPException(status_code=400, detail="Anomaly is already resolved")
+
+    resolution_note = resolution_data.note or f"Resolved via Copilot Action: {resolution_data.action}"
+
+    # 2. EXECUTE THE ACTION
+    if resolution_data.action == "create_journal_entry":
+        # Missing in ledger? Let's create the compensating ledger transaction
+        if not resolution_data.amount:
+             raise HTTPException(status_code=400, detail="Amount is required for create_journal_entry")
+             
+        new_ledger_tx = LedgerTransaction(
+            reconciliation_id=anomaly.reconciliation_id,
+            transaction_date=datetime.now(timezone.utc).date(), # Record it today
+            debit=abs(resolution_data.amount) if resolution_data.amount > 0 else 0,
+            credit=abs(resolution_data.amount) if resolution_data.amount < 0 else 0,
+            description=f"AI Copilot Auto-Adjustment for Anomaly #{anomaly.id}",
+            raw_data='{"source": "system_generated", "type": "copilot_fix"}'
+        )
+        db.add(new_ledger_tx)
+        resolution_note += f" | Created Ledger Entry for {resolution_data.amount}"
+
+    elif resolution_data.action == "delete_duplicate":
+        # Duplicate in ledger? Let's delete the exact offending transaction
+        if anomaly.ledger_transaction_id:
+            tx_id = anomaly.ledger_transaction_id
+            
+            # 1. Disconnect the Foreign Key in memory
+            anomaly.ledger_transaction_id = None 
+            
+            # 2. THE FIX: Flush the update to Postgres immediately!
+            await db.flush()
+            
+            # 3. Now it is safe to delete the row
+            await db.execute(delete(LedgerTransaction).where(LedgerTransaction.id == tx_id))
+            resolution_note += f" | Deleted duplicate ledger transaction #{tx_id}."
+        else:
+            raise HTTPException(status_code=400, detail="No ledger transaction ID attached to this anomaly.")
+    elif resolution_data.action == "reverse_transaction":
+        # Needs to be reversed? (Good for statistical outliers)
+        resolution_note += " | Flagged for manual reversal by accounting team."
+    
+    else:
+        # Fallback for manual review
+        resolution_note += " | Marked as reviewed."
+
+    # 3. Update the Anomaly Record
+    anomaly.is_resolved = True
+    anomaly.resolved_by_id = current_user.id
+    anomaly.resolved_at = datetime.now(timezone.utc)
+    anomaly.resolution_note = resolution_note
+
+    # Save everything securely
+    await db.commit()
+    await db.refresh(anomaly)
+
+    return anomaly

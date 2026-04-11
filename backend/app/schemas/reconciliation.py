@@ -92,7 +92,20 @@ class AnomalyRead(BaseModel):
     suggested_action: Optional[str]
     bank_transaction_id: Optional[int]
     ledger_transaction_id: Optional[int]
+    
+
+    is_resolved: Optional[bool] = False
+    resolution_note: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+
+    
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+class AnomalyResolveRequest(BaseModel):
+    anomaly_id: int
+    action: str
+    amount: Optional[float] = None
+    note: Optional[str] = None
