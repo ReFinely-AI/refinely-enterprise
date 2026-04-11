@@ -1,3 +1,8 @@
+import io
+from fastapi.responses import StreamingResponse
+import openpyxl
+from openpyxl.styles import PatternFill, Font
+from openpyxl.comments import Comment
 from typing import List, Any, Dict, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -434,7 +439,6 @@ async def resolve_anomaly(
 
     resolution_note = resolution_data.note or f"Resolved via Copilot Action: {resolution_data.action}"
 
-    # 2. EXECUTE THE ACTION
     if resolution_data.action == "create_journal_entry":
         # Missing in ledger? Let's create the compensating ledger transaction
         if not resolution_data.amount:
@@ -462,27 +466,156 @@ async def resolve_anomaly(
             # 2. THE FIX: Flush the update to Postgres immediately!
             await db.flush()
             
-            # 3. Now it is safe to delete the row
             await db.execute(delete(LedgerTransaction).where(LedgerTransaction.id == tx_id))
             resolution_note += f" | Deleted duplicate ledger transaction #{tx_id}."
         else:
             raise HTTPException(status_code=400, detail="No ledger transaction ID attached to this anomaly.")
     elif resolution_data.action == "reverse_transaction":
-        # Needs to be reversed? (Good for statistical outliers)
+
         resolution_note += " | Flagged for manual reversal by accounting team."
     
     else:
         # Fallback for manual review
         resolution_note += " | Marked as reviewed."
 
-    # 3. Update the Anomaly Record
+
     anomaly.is_resolved = True
     anomaly.resolved_by_id = current_user.id
     anomaly.resolved_at = datetime.now(timezone.utc)
     anomaly.resolution_note = resolution_note
 
-    # Save everything securely
+
     await db.commit()
     await db.refresh(anomaly)
 
     return anomaly
+
+@router.get("/{reconciliation_id}/export")
+async def export_audit_report(
+    reconciliation_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a color-coded 'Turnitin-style' Excel audit report."""
+    rec = await _get_reconciliation_or_404(db, reconciliation_id, current_user.id)
+    bank_txs, ledger_txs = await _get_transactions_for_reconciliation(db, rec.id)
+
+
+    match_result = await db.execute(select(Match).where(Match.reconciliation_id == rec.id))
+    matches = match_result.scalars().all()
+    
+    anomaly_result = await db.execute(select(Anomaly).where(Anomaly.reconciliation_id == rec.id))
+    anomalies = anomaly_result.scalars().all()
+
+
+    matched_bank_ids = {m.bank_transaction_id for m in matches if m.bank_transaction_id}
+    matched_ledger_ids = {m.ledger_transaction_id for m in matches if m.ledger_transaction_id}
+    
+    anomaly_by_bank = {a.bank_transaction_id: a for a in anomalies if a.bank_transaction_id}
+    anomaly_by_ledger = {a.ledger_transaction_id: a for a in anomalies if a.ledger_transaction_id}
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Audit_Report_{rec.id}"
+
+
+    GREEN_FILL = PatternFill(start_color="c6efce", end_color="c6efce", fill_type="solid") # Matched perfectly
+    RED_FILL = PatternFill(start_color="ffc7ce", end_color="ffc7ce", fill_type="solid")     # Unresolved Anomaly
+    YELLOW_FILL = PatternFill(start_color="ffeb9c", end_color="ffeb9c", fill_type="solid")  # Resolved via Copilot
+
+
+    headers = ["Type", "Status", "Date", "Description", "Amount", "Copilot Notes"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+
+    for tx in bank_txs:
+        status = "Matched"
+        fill = GREEN_FILL
+        notes = "Exact match found."
+        comment_text = None
+
+        if tx.id in anomaly_by_bank:
+            anomaly = anomaly_by_bank[tx.id]
+            if anomaly.is_resolved:
+                status = f"Resolved: {anomaly.anomaly_type}"
+                fill = YELLOW_FILL
+                notes = anomaly.resolution_note
+                comment_text = f"Copilot Analysis: {anomaly.description}\nResolution: {anomaly.resolution_note}"
+            else:
+                status = f"ISSUE: {anomaly.anomaly_type}"
+                fill = RED_FILL
+                notes = anomaly.suggested_action
+                comment_text = f"AI WARNING: {anomaly.title}\n{anomaly.description}"
+        elif tx.id not in matched_bank_ids:
+            status = "Unmatched"
+            fill = RED_FILL
+            notes = "No matching ledger entry found by AI or rules."
+
+        row_data = ["Bank", status, str(tx.transaction_date), tx.description, tx.amount, notes]
+        ws.append(row_data)
+        
+        current_row = ws.max_row
+        for col_idx in range(1, len(row_data) + 1):
+            ws.cell(row=current_row, column=col_idx).fill = fill
+            
+
+        if comment_text:
+            comment = Comment(comment_text, "ReFinely AI Copilot")
+            comment.width = 300
+            comment.height = 100
+            ws.cell(row=current_row, column=2).comment = comment # Attach comment to Status column
+
+
+    for tx in ledger_txs:
+        # If it's a perfect match, we don't need to list it twice. Just list the problems.
+        if tx.id in matched_ledger_ids and tx.id not in anomaly_by_ledger:
+            continue 
+
+        status = "Unmatched"
+        fill = RED_FILL
+        notes = "No matching bank entry found."
+        comment_text = None
+
+        if tx.id in anomaly_by_ledger:
+            anomaly = anomaly_by_ledger[tx.id]
+            if anomaly.is_resolved:
+                status = f"Resolved: {anomaly.anomaly_type}"
+                fill = YELLOW_FILL
+                notes = anomaly.resolution_note
+            else:
+                status = f"ISSUE: {anomaly.anomaly_type}"
+                fill = RED_FILL
+                notes = anomaly.suggested_action
+                comment_text = f"AI WARNING: {anomaly.title}\n{anomaly.description}"
+
+        amount = tx.debit if tx.debit > 0 else -tx.credit
+        row_data = ["Ledger", status, str(tx.transaction_date), tx.description, amount, notes]
+        ws.append(row_data)
+
+        current_row = ws.max_row
+        for col_idx in range(1, len(row_data) + 1):
+            ws.cell(row=current_row, column=col_idx).fill = fill
+            
+        if comment_text:
+            comment = Comment(comment_text, "ReFinely AI Copilot")
+            comment.width = 300
+            comment.height = 100
+            ws.cell(row=current_row, column=2).comment = comment
+
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 40
+    ws.column_dimensions['F'].width = 60
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=ReFinely_Audit_{rec.id}.xlsx"
+        }
+    )
