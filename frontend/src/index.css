@@ -2,17 +2,260 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
-*,
-*::before,
-*::after {
+/* ─── CSS Custom Properties ─────────────────────────────────────────────── */
+:root {
+  /* Brand */
+  --color-brand:           #2D60FF;
+  --color-brand-dark:      #1A3FCC;
+  --color-brand-light:     #EEF2FF;
+
+  /* Semantic */
+  --color-success:         #10B981;
+  --color-success-bg:      #ECFDF5;
+  --color-warning:         #F59E0B;
+  --color-warning-bg:      #FFFBEB;
+  --color-danger:          #EF4444;
+  --color-danger-bg:       #FEF2F2;
+  --color-ai:              #8B5CF6;
+  --color-ai-bg:           #F5F3FF;
+
+  /* Surfaces */
+  --color-bg:              #F8FAFC;
+  --color-surface:         #FFFFFF;
+  --color-border:          #E2E8F0;
+  --color-border-light:    #F1F5F9;
+
+  /* Text */
+  --color-text-primary:    #0F172A;
+  --color-text-secondary:  #64748B;
+  --color-text-muted:      #94A3B8;
+
+  /* Layout */
+  --sidebar-width:         260px;
+  --topbar-height:         72px;
+
+  /* Shadows */
+  --shadow-card:           0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  --shadow-card-hover:     0 8px 20px rgba(15,23,42,.10), 0 3px 8px rgba(15,23,42,.06);
+  --shadow-modal:          0 20px 40px rgba(15,23,42,.16), 0 8px 16px rgba(15,23,42,.08);
+  --shadow-focus:          0 0 0 3px rgba(45,96,255,.20);
+}
+
+/* ─── Global Resets ─────────────────────────────────────────────────────── */
+*, *::before, *::after {
   box-sizing: border-box;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   margin: 0;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  color: #1e293b;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+/* Remove default button styles */
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Smooth scrolling */
+* {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* ─── Utility Classes ───────────────────────────────────────────────────── */
+
+/* Shimmer skeleton animation */
+.skeleton {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Glass morphism */
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* AI gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #2D60FF, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* AI gradient border */
+.gradient-border {
+  background: linear-gradient(#fff, #fff) padding-box,
+              linear-gradient(135deg, #2D60FF, #8B5CF6) border-box;
+  border: 2px solid transparent;
+}
+
+/* Focus ring */
+.focus-ring:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+/* Card base */
+.card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+}
+
+.card-hover {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.card-hover:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* Monospace for financial data */
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.875em;
+}
+
+/* Page enter animation */
+.page-enter {
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+/* Transition helpers */
+.transition-fast  { transition: all 0.15s ease; }
+.transition-base  { transition: all 0.2s ease;  }
+.transition-slow  { transition: all 0.3s ease;  }
+
+/* ─── MUI Overrides ─────────────────────────────────────────────────────── */
+
+/* Remove default MUI Paper box-shadow (we control it via classes) */
+.MuiPaper-root {
+  background-color: #FFFFFF !important;
+}
+
+/* MUI DataGrid */
+.MuiDataGrid-root {
+  border: none !important;
+  font-family: 'Inter', sans-serif !important;
+}
+.MuiDataGrid-columnHeaders {
+  background-color: #F8FAFC !important;
+  border-bottom: 1px solid #E2E8F0 !important;
+}
+.MuiDataGrid-columnHeaderTitle {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: #64748B !important;
+}
+.MuiDataGrid-cell {
+  border-bottom: 1px solid #F1F5F9 !important;
+  font-size: 13px !important;
+  color: #334155 !important;
+}
+.MuiDataGrid-row:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* MUI Tabs */
+.MuiTab-root {
+  text-transform: none !important;
+  font-weight: 500 !important;
+  font-size: 14px !important;
+  color: #64748B !important;
+  min-height: 48px !important;
+}
+.MuiTab-root.Mui-selected {
+  color: #2D60FF !important;
+  font-weight: 600 !important;
+}
+.MuiTabs-indicator {
+  background-color: #2D60FF !important;
+  height: 3px !important;
+  border-radius: 3px 3px 0 0 !important;
+}
+
+/* MUI TextField */
+.MuiOutlinedInput-root {
+  border-radius: 8px !important;
+  font-size: 14px !important;
+}
+.MuiOutlinedInput-notchedOutline {
+  border-color: #E2E8F0 !important;
+}
+.MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: #CBD5E1 !important;
+}
+.MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: #2D60FF !important;
+  border-width: 2px !important;
+}
+.MuiInputLabel-root {
+  font-size: 13px !important;
+  color: #64748B !important;
+}
+.MuiInputLabel-root.Mui-focused {
+  color: #2D60FF !important;
+}
+
+/* MUI Dialog */
+.MuiDialog-paper {
+  border-radius: 20px !important;
+  box-shadow: var(--shadow-modal) !important;
+}
+
+/* MUI Chip */
+.MuiChip-root {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  height: 24px !important;
+}
+
+/* MUI LinearProgress */
+.MuiLinearProgress-root {
+  border-radius: 999px !important;
+  height: 6px !important;
 }

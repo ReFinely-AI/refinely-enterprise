@@ -1,71 +1,236 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Box,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-} from '@mui/material';
-import { LayoutDashboard, Banknote, ListChecks, Building2 } from 'lucide-react';
+  LayoutDashboard,
+  Building2,
+  CreditCard,
+  RefreshCcw,
+  AlertTriangle,
+  Sparkles,
+  Settings,
+  HelpCircle,
+  ChevronDown,
+  LogOut,
+  Plus,
+} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../../contexts/AuthContext';
+import { useOrganizations } from '../../hooks/useOrganizations';
+import { reconciliationService } from '../../services/reconciliation';
+import { cn } from '../../utils';
 
-const Sidebar: React.FC = () => {
+interface NavItem {
+  label: string;
+  icon: React.ReactNode;
+  to: string;
+  badge?: number;
+  ai?: boolean;
+}
+
+const bottomNav: NavItem[] = [
+  { label: 'Settings', icon: <Settings size={18} />, to: '/settings' },
+  { label: 'Help',     icon: <HelpCircle size={18} />, to: '/help' },
+];
+
+const NavLink: React.FC<NavItem & { collapsed?: boolean }> = ({
+  label, icon, to, badge, ai, collapsed,
+}) => {
   const location = useLocation();
   const navigate = useNavigate();
-
-  const items = [
-    { label: 'Dashboard', icon: <LayoutDashboard size={18} />, to: '/dashboard' },
-    { label: 'Organizations', icon: <Building2 size={18} />, to: '/organizations' },
-    { label: 'Bank Accounts', icon: <Banknote size={18} />, to: '/bank-accounts' },
-    { label: 'Reconciliations', icon: <ListChecks size={18} />, to: '/reconciliations' },
-  ];
+  const isActive = location.pathname.startsWith(to);
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
-      <Typography
-        variant="overline"
-        sx={{ letterSpacing: 1, color: 'text.secondary', mb: 1, px: 1.5 }}
-      >
-        Navigation
-      </Typography>
-      <List sx={{ flexGrow: 1 }}>
-        {items.map((item) => {
-          const active = location.pathname.startsWith(item.to);
-          return (
-            <ListItemButton
-              key={item.label}
-              selected={active}
-              onClick={() => navigate(item.to)}
-              sx={{
-                mb: 0.5,
-                borderRadius: 2,
-                '&.Mui-selected': {
-                  bgcolor: '#EFF6FF',
-                  '&:hover': { bgcolor: '#DBEAFE' },
-                },
-              }}
-            >
-              <ListItemIcon
-                sx={{
-                  minWidth: 32,
-                  color: active ? '#1D4ED8' : '#6B7280',
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{
-                  fontSize: 14,
-                  fontWeight: active ? 600 : 500,
-                }}
-              />
-            </ListItemButton>
-          );
-        })}
-      </List>
-    </Box>
+    <button
+      onClick={() => navigate(to)}
+      title={collapsed ? label : undefined}
+      className={cn(
+        'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group relative',
+        isActive
+          ? 'bg-brand-500 text-white shadow-sm'
+          : 'text-surface-500 hover:bg-surface-50 hover:text-surface-800',
+        ai && !isActive && 'hover:bg-ai-50 hover:text-ai-600',
+      )}
+    >
+      <span className={cn(
+        'flex-shrink-0',
+        isActive ? 'text-white' : ai ? 'text-ai-500' : 'text-surface-400 group-hover:text-surface-700',
+      )}>
+        {icon}
+      </span>
+
+      {!collapsed && (
+        <span className="flex-1 text-left truncate">{label}</span>
+      )}
+
+      {!collapsed && badge !== undefined && badge > 0 && (
+        <span className={cn(
+          'ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full min-w-[20px] text-center',
+          isActive
+            ? 'bg-white/20 text-white'
+            : 'bg-danger-500 text-white',
+        )}>
+          {badge}
+        </span>
+      )}
+
+      {collapsed && badge !== undefined && badge > 0 && (
+        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-danger-500" />
+      )}
+    </button>
+  );
+};
+
+const Sidebar: React.FC = () => {
+  const { user, logout, activeOrgId, setActiveOrgId } = useAuth();
+  const { organizations } = useOrganizations();
+  const navigate = useNavigate();
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+
+  const { data: reconciliations = [] } = useQuery({
+    queryKey: ['reconciliations', activeOrgId],
+    queryFn: () => reconciliationService.listReconciliations({ org_id: activeOrgId ?? undefined }),
+    enabled: !!activeOrgId,
+  });
+
+  const totalAnomalies = reconciliations.reduce((s, r) => s + r.anomaly_count, 0);
+
+  const mainNav: NavItem[] = [
+    { label: 'Dashboard',       icon: <LayoutDashboard size={18} />, to: '/dashboard' },
+    { label: 'Organizations',   icon: <Building2 size={18} />,       to: '/organizations' },
+    { label: 'Bank Accounts',   icon: <CreditCard size={18} />,      to: '/bank-accounts' },
+    { label: 'Reconciliations', icon: <RefreshCcw size={18} />,      to: '/reconciliations' },
+    { label: 'Anomalies',       icon: <AlertTriangle size={18} />,   to: '/anomalies', badge: totalAnomalies || undefined },
+    { label: 'AI Copilot',      icon: <Sparkles size={18} />,        to: '/copilot', ai: true },
+  ];
+
+  const activeOrg = organizations.find((o) => o.id === activeOrgId) ?? organizations[0];
+  const initials = user?.full_name
+    ? user.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+    : 'U';
+
+  return (
+    <aside
+      className="fixed left-0 top-0 h-full flex flex-col bg-white border-r border-surface-200 z-30"
+      style={{ width: 'var(--sidebar-width)' }}
+    >
+      {/* ── Logo ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 px-5 h-[72px] border-b border-surface-100 flex-shrink-0">
+        <div className="w-8 h-8 rounded-xl bg-brand-500 flex items-center justify-center shadow-sm">
+          <RefreshCcw size={16} className="text-white" />
+        </div>
+        <span className="text-[18px] font-bold text-surface-900 tracking-tight">
+          Refinely
+        </span>
+      </div>
+
+      {/* ── Org Switcher ──────────────────────────────────── */}
+      <div className="px-3 py-3 border-b border-surface-100 flex-shrink-0">
+        <div className="relative">
+          <button
+            onClick={() => setOrgMenuOpen((p) => !p)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-surface-50 hover:bg-surface-100 transition-colors border border-surface-200 group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-brand-100 flex items-center justify-center flex-shrink-0">
+              <Building2 size={14} className="text-brand-600" />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-semibold text-surface-800 truncate leading-tight">
+                {activeOrg?.name ?? 'No organization'}
+              </p>
+              <p className="text-xs text-surface-400 leading-tight">
+                {activeOrg?.currency ?? 'PKR'}
+              </p>
+            </div>
+            <ChevronDown
+              size={14}
+              className={cn(
+                'text-surface-400 transition-transform flex-shrink-0',
+                orgMenuOpen && 'rotate-180',
+              )}
+            />
+          </button>
+
+          {orgMenuOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-surface-200 rounded-xl shadow-lg z-50 overflow-hidden">
+              <div className="p-1">
+                {organizations.map((org) => (
+                  <button
+                    key={org.id}
+                    onClick={() => { setActiveOrgId(org.id); setOrgMenuOpen(false); }}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
+                      org.id === activeOrgId
+                        ? 'bg-brand-50 text-brand-700 font-semibold'
+                        : 'text-surface-700 hover:bg-surface-50',
+                    )}
+                  >
+                    <div className="w-6 h-6 rounded-md bg-brand-100 flex items-center justify-center flex-shrink-0">
+                      <Building2 size={12} className="text-brand-600" />
+                    </div>
+                    <span className="truncate">{org.name}</span>
+                    {org.id === activeOrgId && (
+                      <span className="ml-auto text-xs text-brand-500">Active</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-surface-100 p-1">
+                <button
+                  onClick={() => { navigate('/organizations'); setOrgMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-brand-600 hover:bg-brand-50 transition-colors font-medium"
+                >
+                  <Plus size={14} />
+                  New Organization
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Main Navigation ───────────────────────────────── */}
+      <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-surface-400 px-3 pb-2">
+          Main Menu
+        </p>
+        {mainNav.map((item) => (
+          <NavLink key={item.to} {...item} />
+        ))}
+
+        <div className="pt-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-surface-400 px-3 pb-2">
+            Account
+          </p>
+          {bottomNav.map((item) => (
+            <NavLink key={item.to} {...item} />
+          ))}
+        </div>
+      </nav>
+
+      {/* ── User Footer ───────────────────────────────────── */}
+      <div className="border-t border-surface-100 p-3 flex-shrink-0">
+        <div className="flex items-center gap-3 px-2 py-1.5">
+          <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-surface-800 truncate leading-tight">
+              {user?.full_name ?? 'User'}
+            </p>
+            <p className="text-xs text-surface-400 truncate leading-tight">
+              {user?.email ?? ''}
+            </p>
+          </div>
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="flex-shrink-0 p-1.5 rounded-lg text-surface-400 hover:text-danger-500 hover:bg-danger-50 transition-colors"
+          >
+            <LogOut size={15} />
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 };
 

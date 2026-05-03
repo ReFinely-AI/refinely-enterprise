@@ -1,90 +1,39 @@
-import React, { useState } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  LinearProgress,
-  Box,
-  Typography,
-  Grid,
-  Chip,
-  CircularProgress,
-} from '@mui/material';
+import React, { useState, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button } from './ui/Button';
+import { CloudUpload, X, FileText, CheckCircle2 } from 'lucide-react';
 import { reconciliationService } from '../services/reconciliation';
-import { CloudUpload, CircleCheck } from 'lucide-react';
-
-// Simple classnames helper
-const cn = (...classes: (string | false | null | undefined)[]) =>
-  classes.filter(Boolean).join(' ');
+import { cn } from '../utils';
 
 interface Props {
   open: boolean;
   reconciliationId: number;
+  type: 'bank' | 'ledger';
   onClose: () => void;
-  onFilesUploaded: () => void;
+  onSuccess: () => void;
 }
 
 const FileUploadDialog: React.FC<Props> = ({
-  open,
-  reconciliationId,
-  onClose,
-  onFilesUploaded,
+  open, reconciliationId, type, onClose, onSuccess,
 }) => {
-  const [bankFile, setBankFile] = useState<File | null>(null);
-  const [ledgerFile, setLedgerFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState<'bank' | 'ledger'>(type);
 
-  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (open) {
+      setActiveTab(type);
+      setFile(null);
+      setError('');
+      setSuccess(false);
+    }
+  }, [open, type]);
 
-  const uploadBankMutation = useMutation({
-    mutationFn: (file: File) =>
-      reconciliationService.uploadBankFile(reconciliationId, file, {
-        date_column: 'Date',
-        amount_column: 'Amount',
-        description_column: 'Description',
-      }),
-  });
-
-  const uploadLedgerMutation = useMutation({
-    mutationFn: (file: File) =>
-      reconciliationService.uploadLedgerFile(reconciliationId, file, {
-        date_column: 'Date',
-        debit_column: 'Debit',
-        credit_column: 'Credit',
-        description_column: 'Description',
-      }),
-  });
-
-  const {
-    getRootProps,
-    getInputProps,
-    isDragActive,
-  } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
-        setBankFile(acceptedFiles[0]);
-        setError('');
-      }
-    },
-    accept: {
-      'text/csv': ['.csv'],
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-      'application/vnd.ms-excel': ['.xls'],
-    },
-    multiple: false,
-  });
-
-  const ledgerDropzone = useDropzone({
-    onDrop: (acceptedFiles) => {
-      if (acceptedFiles.length > 0) {
-        setLedgerFile(acceptedFiles[0]);
+        setFile(acceptedFiles[0]);
         setError('');
       }
     },
@@ -97,199 +46,184 @@ const FileUploadDialog: React.FC<Props> = ({
   });
 
   const handleUpload = async () => {
-    if (!bankFile || !ledgerFile) {
-      setError('Please upload both bank statement and ledger files');
-      return;
-    }
-
+    if (!file) { setError('Please select a file'); return; }
     setUploading(true);
     setError('');
-    setSuccess(false);
-
     try {
-      await uploadBankMutation.mutateAsync(bankFile);
-      await uploadLedgerMutation.mutateAsync(ledgerFile);
-
-      // Refresh reconciliation + transactions so UI updates immediately
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['reconciliation', reconciliationId] }),
-        queryClient.invalidateQueries({
-          queryKey: ['reconciliation-transactions', reconciliationId],
-        }),
-      ]);
-
+      if (activeTab === 'bank') {
+        await reconciliationService.uploadBankFile(reconciliationId, file, {
+          date_column: 'Date',
+          amount_column: 'Amount',
+          description_column: 'Description',
+        });
+      } else {
+        await reconciliationService.uploadLedgerFile(reconciliationId, file, {
+          date_column: 'Date',
+          debit_column: 'Debit',
+          credit_column: 'Credit',
+          description_column: 'Description',
+        });
+      }
       setSuccess(true);
       setTimeout(() => {
-        onFilesUploaded();
-        onClose();
-      }, 1500);
+        onSuccess();
+        setSuccess(false);
+        setFile(null);
+      }, 1200);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || 'Upload failed');
+      setError(err?.response?.data?.detail || 'Upload failed. Please check the file format.');
     } finally {
       setUploading(false);
     }
   };
 
+  const handleClose = () => {
+    if (!uploading) {
+      setFile(null);
+      setError('');
+      setSuccess(false);
+      onClose();
+    }
+  };
+
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CloudUpload size={24} />
-          <Typography variant="h6">Upload Transaction Files</Typography>
-        </Box>
-      </DialogTitle>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-[560px] animate-slide-up">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-surface-200">
+          <div className="flex items-center gap-2">
+            <CloudUpload size={18} className="text-brand-500" />
+            <h2 className="text-lg font-bold text-surface-900">Upload Files</h2>
+          </div>
+          <button onClick={handleClose} className="text-surface-400 hover:text-surface-700 p-1 rounded-md hover:bg-surface-100">
+            <X size={18} />
+          </button>
+        </div>
 
-      <DialogContent sx={{ p: 0 }}>
-        {error && (
-          <Alert severity="error" sx={{ m: 3 }}>
-            {error}
-          </Alert>
-        )}
-
-        {success ? (
-          <Box sx={{ p: 6, textAlign: 'center' }}>
-            <Box
-              sx={{
-                width: 64,
-                height: 64,
-                bgcolor: 'green.100',
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                mx: 'auto',
-                mb: 2,
-              }}
+        {/* Tabs */}
+        <div className="flex border-b border-surface-200 px-6">
+          {(['bank', 'ledger'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => { setActiveTab(t); setFile(null); setError(''); }}
+              className={cn(
+                'px-4 py-3 text-sm font-medium border-b-[3px] transition-colors -mb-px',
+                activeTab === t ? 'border-brand-500 text-brand-600' : 'border-transparent text-surface-500 hover:text-surface-700',
+              )}
             >
-              <CircleCheck className="w-8 h-8 text-green-600" />
-            </Box>
-            <Typography variant="h6" gutterBottom>
-              Files uploaded successfully!
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Ready for matching analysis. Close this dialog to continue.
-            </Typography>
-          </Box>
-        ) : (
-          <Box sx={{ p: 4 }}>
-            {uploading ? (
-              <Box sx={{ textAlign: 'center', py: 6 }}>
-                <CircularProgress size={48} sx={{ mb: 2 }} />
-                <Typography variant="h6">Uploading files...</Typography>
-                <LinearProgress sx={{ mt: 2, borderRadius: 2 }} />
-              </Box>
-            ) : (
-              <Grid container spacing={3}>
-                {/* Bank File Upload */}
-                <Grid item xs={12} md={6}>
-                  <Typography variant="h6" sx={{ mb: 2 }}>
-                    Bank Statement
-                  </Typography>
-                  <div
-                    {...getRootProps()}
-                    className={cn(
-                      'border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center cursor-pointer hover:border-blue-400 transition-colors',
-                      isDragActive && 'border-blue-400 bg-blue-50',
-                    )}
-                  >
-                    <input {...getInputProps()} />
-                    {bankFile ? (
-                      <div className="space-y-2">
-                        <Chip
-                          label={bankFile.name}
-                          color="primary"
-                          size="medium"
-                          sx={{ fontSize: '0.75rem' }}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setBankFile(null);
-                          }}
-                        >
-                          Change
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <CloudUpload size={48} className="mx-auto mb-4 text-gray-400" />
-                        <Typography variant="h6" gutterBottom>
-                          Drop bank CSV/Excel or click to browse
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Supports .csv, .xlsx, .xls
-                        </Typography>
-                      </>
-                    )}
-                  </div>
-                </Grid>
+              {t === 'bank' ? 'Bank Statement' : 'Ledger File'}
+            </button>
+          ))}
+        </div>
 
-                {/* Ledger File Upload */}
-                <Grid item xs={12} md={6}>
-                  <Typography variant="h6" sx={{ mb: 2 }}>
-                    Ledger File
-                  </Typography>
-                  <div
-                    {...ledgerDropzone.getRootProps()}
-                    className={cn(
-                      'border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center cursor-pointer hover:border-blue-400 transition-colors',
-                      ledgerDropzone.isDragActive && 'border-blue-400 bg-blue-50',
-                    )}
-                  >
-                    <input {...ledgerDropzone.getInputProps()} />
-                    {ledgerFile ? (
-                      <div className="space-y-2">
-                        <Chip
-                          label={ledgerFile.name}
-                          color="success"
-                          size="medium"
-                          sx={{ fontSize: '0.75rem' }}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLedgerFile(null);
-                          }}
-                        >
-                          Change
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <CloudUpload size={48} className="mx-auto mb-4 text-gray-400" />
-                        <Typography variant="h6" gutterBottom>
-                          Drop ledger CSV/Excel or click to browse
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Must have Date, Debit, Credit columns
-                        </Typography>
-                      </>
-                    )}
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="px-4 py-3 rounded-lg bg-danger-50 border border-danger-100 text-danger-600 text-sm">
+              {error}
+            </div>
+          )}
+
+          {success ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <div className="w-14 h-14 rounded-full bg-success-50 flex items-center justify-center mb-3">
+                <CheckCircle2 size={28} className="text-success-500" />
+              </div>
+              <p className="text-base font-semibold text-surface-800">File uploaded successfully!</p>
+              <p className="text-sm text-surface-400 mt-1">Closing...</p>
+            </div>
+          ) : (
+            <>
+              {/* Drop zone */}
+              <div
+                {...getRootProps()}
+                className={cn(
+                  'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
+                  isDragActive
+                    ? 'border-brand-500 bg-brand-50'
+                    : file
+                    ? 'border-success-400 bg-success-50/30'
+                    : 'border-surface-300 hover:border-brand-400 hover:bg-surface-50',
+                )}
+              >
+                <input {...getInputProps()} />
+                {file ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <FileText size={32} className="text-success-500" />
+                    <p className="text-sm font-semibold text-surface-800">{file.name}</p>
+                    <p className="text-xs text-surface-400">{(file.size / 1024).toFixed(1)} KB</p>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setFile(null); }}
+                      className="text-xs text-danger-500 hover:text-danger-600 font-medium"
+                    >
+                      ✕ Remove
+                    </button>
                   </div>
-                </Grid>
-              </Grid>
-            )}
-          </Box>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <CloudUpload size={36} className="text-surface-400" />
+                    <p className="text-sm font-medium text-surface-700">
+                      Drag & drop your{' '}
+                      {activeTab === 'bank' ? 'bank statement' : 'ledger file'} here
+                    </p>
+                    <p className="text-xs text-surface-400">
+                      or{' '}
+                      <span className="text-brand-500 font-medium">browse files</span>
+                    </p>
+                    <p className="text-xs text-surface-400 mt-1">Supports .csv, .xlsx, .xls · Max 10MB</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Column hints */}
+              <div className="p-3 bg-surface-50 rounded-lg border border-surface-200">
+                <p className="text-xs font-semibold text-surface-600 mb-1.5">
+                  Required columns in your {activeTab === 'bank' ? 'bank statement' : 'ledger file'}:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(activeTab === 'bank'
+                    ? ['Date', 'Amount', 'Description', 'Reference (optional)']
+                    : ['Date', 'Debit', 'Credit', 'Description (optional)']
+                  ).map((col) => (
+                    <span key={col} className="text-xs px-2 py-0.5 bg-white border border-surface-200 rounded-md text-surface-600 font-mono">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!success && (
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-surface-200">
+            <button
+              onClick={handleClose}
+              disabled={uploading}
+              className="px-4 py-2 border border-surface-200 rounded-md text-sm font-medium text-surface-700 hover:bg-surface-50 disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={!file || uploading}
+              className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-sm font-semibold rounded-md transition-colors flex items-center gap-2"
+            >
+              {uploading ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Uploading...
+                </>
+              ) : 'Upload & Save →'}
+            </button>
+          </div>
         )}
-      </DialogContent>
-
-      <DialogActions sx={{ p: 3, pt: 0 }}>
-        <Button variant="outline" onClick={onClose} disabled={uploading}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          onClick={handleUpload}
-          disabled={!bankFile || !ledgerFile || uploading}
-        >
-          {uploading ? 'Uploading...' : 'Upload Files & Analyze'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      </div>
+    </div>
   );
 };
 

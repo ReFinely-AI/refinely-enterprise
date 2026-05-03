@@ -1,182 +1,216 @@
-// src/pages/Organizations.tsx
 import React, { useState } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-} from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../contexts/AuthContext';
-import AppLayout from '../components/layout/AppLayout';
-import { Button } from '../components/ui/Button';
+import { Building2, Plus, CreditCard, RefreshCcw, X } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { reconciliationService } from '../services/reconciliation';
 import { useAuth } from '../contexts/AuthContext';
+import { cn } from '../utils';
+import PageHeader from '../components/layout/PageHeader';
 
-interface Organization {
-  id: number;
-  name: string;
-  currency: string;
-  created_at: string;
-}
-
-const fetchOrganizations = async (): Promise<Organization[]> => {
-  const res = await apiClient.get('/organizations/');
-  return res.data;
-};
-
-const createOrganization = async (data: { name: string; currency?: string }) => {
-  const res = await apiClient.post('/organizations/', data);
-  return res.data as Organization;
-};
+const CURRENCIES = ['PKR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'INR'];
 
 const OrganizationsPage: React.FC = () => {
-  const queryClient = useQueryClient();
-  const { setActiveOrgId, activeOrgId } = useAuth();
-
-  const { data: orgs = [], isLoading } = useQuery({
-    queryKey: ['organizations'],
-    queryFn: fetchOrganizations,
-  });
-
-  const [open, setOpen] = useState(false);
+  const { activeOrgId, setActiveOrgId } = useAuth();
+  const qc = useQueryClient();
+  const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('PKR');
+  const [error, setError] = useState('');
 
-  const mutation = useMutation({
-    mutationFn: createOrganization,
+  const { data: organizations = [], isLoading } = useQuery({
+    queryKey: ['organizations'],
+    queryFn: () => reconciliationService.getOrganizations(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; currency: string }) =>
+      reconciliationService.createOrganization(data),
     onSuccess: (org) => {
-      queryClient.invalidateQueries({ queryKey: ['organizations'] });
-      // if no active org, set the newly-created one
-      if (!activeOrgId) {
-        setActiveOrgId(org.id);
-      }
-      setOpen(false);
+      qc.invalidateQueries({ queryKey: ['organizations'] });
+      setActiveOrgId(org.id);
+      setModalOpen(false);
       setName('');
       setCurrency('PKR');
+      setError('');
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.detail || 'Failed to create organization');
     },
   });
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate({ name, currency: currency || 'PKR' });
+    if (!name.trim()) { setError('Organization name is required'); return; }
+    setError('');
+    createMutation.mutate({ name: name.trim(), currency });
   };
 
   return (
-    <AppLayout>
-      <Box sx={{ p: 3 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 3,
-          }}
-        >
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Organizations
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Manage workspaces you belong to.
-            </Typography>
-          </Box>
-          <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
-            Add organization
-          </Button>
-        </Box>
+    <div className="flex flex-col min-h-screen bg-surface-50">
+      <PageHeader
+        title="Organizations"
+        subtitle="Manage your companies and entities"
+        actions={
+          <button
+            onClick={() => setModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md transition-all"
+          >
+            <Plus size={15} /> New Organization
+          </button>
+        }
+      />
 
-        <Paper sx={{ p: 2 }}>
-          {isLoading ? (
-            <Typography variant="body2">Loading organizations…</Typography>
-          ) : orgs.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No organizations yet. Create one to get started.
-            </Typography>
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Currency</TableCell>
-                  <TableCell>Created at</TableCell>
-                  <TableCell align="right">Active</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {orgs.map((org) => (
-                  <TableRow
-                    key={org.id}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => setActiveOrgId(org.id)}
-                  >
-                    <TableCell>{org.name}</TableCell>
-                    <TableCell>{org.currency}</TableCell>
-                    <TableCell>
-                      {new Date(org.created_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell align="right">
-                      {activeOrgId === org.id ? 'Current' : ''}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </Paper>
+      <div className="flex-1 p-8">
+        {isLoading ? (
+          <div className="grid grid-cols-3 gap-5">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="card p-6 space-y-3">
+                <div className="skeleton h-10 w-10 rounded-xl" />
+                <div className="skeleton h-5 w-32" />
+                <div className="skeleton h-4 w-20" />
+              </div>
+            ))}
+          </div>
+        ) : organizations.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Building2 size={56} className="text-surface-300 mb-4" />
+            <p className="text-lg font-semibold text-surface-700 mb-2">No organizations yet</p>
+            <p className="text-sm text-surface-400 mb-6">Create your first organization to start reconciling.</p>
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md"
+            >
+              <Plus size={15} /> New Organization
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-5">
+            {organizations.map((org) => {
+              const isActive = org.id === activeOrgId;
+              return (
+                <div
+                  key={org.id}
+                  className={cn(
+                    'card card-hover flex flex-col relative',
+                    isActive && 'border-l-4 border-l-brand-500',
+                  )}
+                >
+                  {isActive && (
+                    <span className="absolute top-4 right-4 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-success-50 text-success-600">
+                      Active
+                    </span>
+                  )}
+                  <div className="p-6 flex-1">
+                    <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center mb-4">
+                      <Building2 size={18} className="text-brand-600" />
+                    </div>
+                    <h3 className="text-lg font-bold text-surface-900 mb-1">{org.name}</h3>
+                    <p className="text-sm text-surface-400 mb-1">
+                      Created {format(parseISO(org.created_at), 'MMM yyyy')}
+                    </p>
+                    <p className="text-sm text-surface-600">
+                      Currency: <span className="font-medium">{org.currency}</span>
+                    </p>
 
-        <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle>Create organization</DialogTitle>
-          <Box component="form" onSubmit={handleCreate}>
-            <DialogContent>
-              <TextField
-                label="Name"
-                fullWidth
-                margin="normal"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <TextField
-                label="Currency"
-                fullWidth
-                margin="normal"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                helperText="e.g. PKR, USD"
-              />
-            </DialogContent>
-            <DialogActions sx={{ p: 2.5, pt: 0 }}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                loading={mutation.isPending}
-              >
-                Create
-              </Button>
-            </DialogActions>
-          </Box>
-        </Dialog>
-      </Box>
-    </AppLayout>
+                    <div className="flex items-center gap-4 mt-4 pt-4 border-t border-surface-100">
+                      <div className="flex items-center gap-1.5 text-sm text-surface-500">
+                        <CreditCard size={14} />
+                        <span>Bank Accounts</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-sm text-surface-500">
+                        <RefreshCcw size={14} />
+                        <span>Reconciliations</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-6 pb-5 flex gap-2">
+                    {!isActive && (
+                      <button
+                        onClick={() => setActiveOrgId(org.id)}
+                        className="flex-1 h-8 border border-surface-200 rounded-md text-xs font-medium text-surface-700 hover:bg-surface-50 hover:border-brand-500 hover:text-brand-600 transition-colors"
+                      >
+                        Set Active
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setActiveOrgId(org.id)}
+                      className="flex-1 h-8 bg-brand-500 hover:bg-brand-600 rounded-md text-xs font-semibold text-white transition-colors"
+                    >
+                      Open →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── New Org Modal ───────────────────────────── */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setModalOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[480px] animate-slide-up">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-surface-200">
+              <h2 className="text-lg font-bold text-surface-900">New Organization</h2>
+              <button onClick={() => setModalOpen(false)} className="text-surface-400 hover:text-surface-700 p-1 rounded-md hover:bg-surface-100">
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreate} className="p-6 space-y-5">
+              {error && (
+                <div className="px-4 py-3 rounded-lg bg-danger-50 border border-danger-100 text-danger-600 text-sm">
+                  {error}
+                </div>
+              )}
+              <div>
+                <label className="block text-[13px] font-medium text-surface-600 mb-1.5">
+                  Organization name <span className="text-danger-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. ACME Corp Ltd."
+                  required
+                  className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm text-surface-800 placeholder-surface-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-surface-600 mb-1.5">
+                  Default currency <span className="text-danger-500">*</span>
+                </label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm text-surface-800 bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                >
+                  {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <p className="text-xs text-surface-400 mt-1.5">Used as the default for bank accounts and reports</p>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="px-4 py-2 border border-surface-200 rounded-md text-sm font-medium text-surface-700 hover:bg-surface-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-semibold rounded-md transition-colors"
+                >
+                  {createMutation.isPending ? 'Creating...' : 'Create Organization'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

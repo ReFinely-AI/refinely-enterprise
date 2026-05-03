@@ -1,141 +1,76 @@
-// src/App.tsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import {
-  CssBaseline,
-  ThemeProvider,
-  createTheme,
-  Box,
-  CircularProgress,
-} from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import AppLayout from './components/layout/AppLayout';
+
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import Dashboard from './pages/Dashboard';
-import ReconciliationDetail from './pages/ReconciliationDetail';
 import OrganizationsPage from './pages/Organizations';
 import BankAccountsPage from './pages/BankAccounts';
 import ReconciliationsPage from './pages/Reconciliations';
+import ReconciliationDetail from './pages/ReconciliationDetail';
+import AnomaliesPage from './pages/Anomalies';
+import AICopilotPage from './pages/AICopilot';
+import SettingsPage from './pages/Settings';
 
-// Query client for data fetching
-const queryClient = new QueryClient();
-
-// ReFinely Theme (Attio-inspired)
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: { main: '#3B82F6' },
-    secondary: { main: '#10B981' },
-    background: { default: '#FAFBFC', paper: 'white' },
-    text: { primary: '#111827', secondary: '#6B7280' },
-  },
-  shape: { borderRadius: 12 },
-  typography: {
-    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
-    h1: { fontWeight: 700 },
-    h2: { fontWeight: 600 },
-    h3: { fontWeight: 600 },
-    h4: { fontWeight: 600 },
-    h5: { fontWeight: 600 },
-    h6: { fontWeight: 600 },
-    button: { fontWeight: 500 },
-  },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          textTransform: 'none',
-          fontWeight: 500,
-        },
-      },
-    },
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30_000 },
   },
 });
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-surface-50">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center animate-pulse-soft">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M3 10a7 7 0 1114 0A7 7 0 013 10z" stroke="white" strokeWidth="2"/>
+            <path d="M10 7v3l2 2" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </div>
+        <p className="text-sm text-surface-500">Loading Refinely...</p>
+      </div>
+    </div>
+  );
 }
 
-function AppContent() {
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  return user ? <AppLayout>{children}</AppLayout> : <Navigate to="/login" replace />;
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <LoadingScreen />;
+  return user ? <Navigate to="/dashboard" replace /> : <>{children}</>;
+}
+
+function AppRoutes() {
   return (
     <BrowserRouter>
-      <CssBaseline />
       <Routes>
-        {/* Auth */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<SignUp />} />
+        {/* Public */}
+        <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
+        <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+        <Route path="/signup" element={<PublicRoute><SignUp /></PublicRoute>} />
 
-        {/* Main app */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/organizations"
-          element={
-            <ProtectedRoute>
-              <OrganizationsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/bank-accounts"
-          element={
-            <ProtectedRoute>
-              <BankAccountsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reconciliations"
-          element={
-            <ProtectedRoute>
-              <ReconciliationsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reconciliations/:id"
-          element={
-            <ProtectedRoute>
-              <ReconciliationDetail />
-            </ProtectedRoute>
-          }
-        />
+        {/* Protected */}
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/organizations" element={<ProtectedRoute><OrganizationsPage /></ProtectedRoute>} />
+        <Route path="/bank-accounts" element={<ProtectedRoute><BankAccountsPage /></ProtectedRoute>} />
+        <Route path="/reconciliations" element={<ProtectedRoute><ReconciliationsPage /></ProtectedRoute>} />
+        <Route path="/reconciliations/:id" element={<ProtectedRoute><ReconciliationDetail /></ProtectedRoute>} />
+        <Route path="/anomalies" element={<ProtectedRoute><AnomaliesPage /></ProtectedRoute>} />
+        <Route path="/copilot" element={<ProtectedRoute><AICopilotPage /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="/settings/:section" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
-        {/* Default redirects */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
@@ -144,11 +79,9 @@ function AppContent() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

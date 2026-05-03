@@ -6,9 +6,13 @@ import {
   ReconciliationTransactionsResponse,
   RunMatchResponse,
   Match,
+  Anomaly,
+  ResolveAction,
+  CopilotResponse,
 } from '../types/reconciliation';
 
-// Organizations
+// ── Organizations ─────────────────────────────────────────────────────────
+
 const getOrganizations = async (): Promise<Organization[]> => {
   const res = await apiClient.get('/organizations/');
   return res.data;
@@ -18,12 +22,17 @@ const createOrganization = async (data: {
   name: string;
   currency?: string;
 }): Promise<Organization> => {
-  // Backend OrganizationCreate: { name: string, currency: string | null, default "PKR" }
   const res = await apiClient.post('/organizations/', data);
   return res.data;
 };
 
-// Bank accounts
+const getOrganization = async (orgId: number): Promise<Organization> => {
+  const res = await apiClient.get(`/organizations/${orgId}`);
+  return res.data;
+};
+
+// ── Bank Accounts ─────────────────────────────────────────────────────────
+
 const getBankAccounts = async (orgId: number): Promise<BankAccount[]> => {
   const res = await apiClient.get(`/reconciliations/bank-accounts?org_id=${orgId}`);
   return res.data;
@@ -39,7 +48,6 @@ const createBankAccount = async (
     date_tolerance_days?: number | null;
   },
 ): Promise<BankAccount> => {
-  // Backend BankAccountCreate: fields match these keys
   const res = await apiClient.post(
     `/reconciliations/bank-accounts?org_id=${orgId}`,
     data,
@@ -47,12 +55,13 @@ const createBankAccount = async (
   return res.data;
 };
 
+// ── Reconciliations ───────────────────────────────────────────────────────
+
 const createReconciliation = async (data: {
   bank_account_id: number;
-  period_start: string; // "YYYY-MM-DD"
-  period_end: string;   // "YYYY-MM-DD"
+  period_start: string;
+  period_end: string;
 }): Promise<Reconciliation> => {
-  // Backend ReconciliationCreate: { bank_account_id, period_start, period_end }
   const res = await apiClient.post('/reconciliations/', data);
   return res.data;
 };
@@ -62,7 +71,19 @@ const getReconciliation = async (id: number): Promise<Reconciliation> => {
   return res.data;
 };
 
-// Transactions for a reconciliation
+const listReconciliations = async (params?: {
+  org_id?: number;
+  bank_account_id?: number;
+  status?: string;
+}): Promise<Reconciliation[]> => {
+  const query = new URLSearchParams();
+  if (params?.org_id) query.set('org_id', String(params.org_id));
+  if (params?.bank_account_id) query.set('bank_account_id', String(params.bank_account_id));
+  if (params?.status) query.set('status', params.status);
+  const res = await apiClient.get(`/reconciliations/?${query.toString()}`);
+  return res.data;
+};
+
 const getReconciliationTransactions = async (
   reconciliationId: number,
 ): Promise<ReconciliationTransactionsResponse> => {
@@ -70,17 +91,52 @@ const getReconciliationTransactions = async (
   return res.data;
 };
 
-// Run matching
 const runMatching = async (reconciliationId: number): Promise<RunMatchResponse> => {
   const res = await apiClient.post(`/reconciliations/${reconciliationId}/match`);
   return res.data;
 };
 
-// Get all matches
 const getMatches = async (reconciliationId: number): Promise<Match[]> => {
   const res = await apiClient.get(`/reconciliations/${reconciliationId}/matches`);
   return res.data;
 };
+
+// ── Anomalies ─────────────────────────────────────────────────────────────
+
+const getAnomalies = async (reconciliationId: number): Promise<Anomaly[]> => {
+  const res = await apiClient.get(`/reconciliations/${reconciliationId}/anomalies`);
+  return res.data;
+};
+
+const resolveAnomaly = async (data: {
+  anomaly_id: number;
+  action: ResolveAction;
+  note?: string;
+}): Promise<Anomaly> => {
+  const res = await apiClient.post('/reconciliations/resolve-anomaly', data);
+  return res.data;
+};
+
+// ── AI Copilot ────────────────────────────────────────────────────────────
+
+const copilotChat = async (data: {
+  reconciliation_id: number;
+  message: string;
+}): Promise<CopilotResponse> => {
+  const res = await apiClient.post('/copilot/chat', data);
+  return res.data;
+};
+
+// ── Export ────────────────────────────────────────────────────────────────
+
+const exportReport = async (reconciliationId: number): Promise<Blob> => {
+  const res = await apiClient.get(`/reconciliations/${reconciliationId}/export`, {
+    responseType: 'blob',
+  });
+  return res.data;
+};
+
+// ── File Uploads ──────────────────────────────────────────────────────────
 
 const uploadBankFile = async (
   reconciliationId: number,
@@ -95,7 +151,6 @@ const uploadBankFile = async (
   if (mapping.description_column) {
     formData.append('description_column', mapping.description_column);
   }
-
   const res = await apiClient.post('/reconciliations/upload/bank', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
@@ -121,7 +176,6 @@ const uploadLedgerFile = async (
   if (mapping.description_column) {
     formData.append('description_column', mapping.description_column);
   }
-
   const res = await apiClient.post('/reconciliations/upload/ledger', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
@@ -131,13 +185,19 @@ const uploadLedgerFile = async (
 export const reconciliationService = {
   getOrganizations,
   createOrganization,
+  getOrganization,
   getBankAccounts,
   createBankAccount,
   createReconciliation,
+  listReconciliations,
   getReconciliation,
   getReconciliationTransactions,
   runMatching,
   getMatches,
+  getAnomalies,
+  resolveAnomaly,
+  copilotChat,
+  exportReport,
   uploadBankFile,
   uploadLedgerFile,
 };

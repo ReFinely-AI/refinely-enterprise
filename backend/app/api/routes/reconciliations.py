@@ -3,8 +3,8 @@ from fastapi.responses import StreamingResponse
 import openpyxl
 from openpyxl.styles import PatternFill, Font
 from openpyxl.comments import Comment
-from typing import List, Any, Dict, Tuple
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from typing import List, Any, Dict, Tuple, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from fastapi.concurrency import run_in_threadpool
@@ -16,6 +16,7 @@ from app.schemas.reconciliation import AnomalyResolveRequest
 from app.models.reconciliation import (
     BankAccount,
     Reconciliation,
+    ReconciliationStatus,
     BankTransaction,
     LedgerTransaction,
     Anomaly,
@@ -39,6 +40,32 @@ from app.services.matching_engine import run_matching
 from app.services.anomaly_agent import run_anomaly_detection  # Imported Anomaly Agent
 from app.schemas.reconciliation import AnomalyRead
 router = APIRouter()
+
+
+@router.get("/", response_model=List[ReconciliationResponse])
+async def list_reconciliations(
+    org_id: Optional[int] = Query(None),
+    bank_account_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List reconciliations, optionally filtered by org, bank account, or status."""
+    stmt = (
+        select(Reconciliation)
+        .join(BankAccount, BankAccount.id == Reconciliation.bank_account_id)
+        .where(Reconciliation.created_by_id == current_user.id)
+    )
+    if org_id is not None:
+        stmt = stmt.where(BankAccount.organization_id == org_id)
+    if bank_account_id is not None:
+        stmt = stmt.where(Reconciliation.bank_account_id == bank_account_id)
+    if status is not None:
+        stmt = stmt.where(Reconciliation.status == status)
+    stmt = stmt.order_by(Reconciliation.created_at.desc())
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
 
 async def _get_reconciliation_or_404(
     db: AsyncSession,
@@ -358,10 +385,11 @@ async def run_reconciliation_matching(
     anomaly_models = [Anomaly(**a) for a in anomaly_dicts]
     if anomaly_models:
         db.add_all(anomaly_models)
-        
-    # Update the anomaly count dynamically
+
     rec.anomaly_count = len(anomaly_models)
-    
+    rec.status = ReconciliationStatus.COMPLETED
+    rec.completed_at = datetime.now(timezone.utc)
+
     await db.commit()
     await db.refresh(rec)
 

@@ -1,803 +1,382 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Container,
-  AppBar,
-  Toolbar,
-  Avatar,
-  Typography,
-  Box,
-  Chip,
-  Paper,
-  Grid,
-  LinearProgress,
-  Alert,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Divider,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  MenuItem,
-} from '@mui/material';
-import { useNavigate, useLocation } from 'react-router-dom';
+  RefreshCcw, DollarSign, AlertTriangle, TrendingUp,
+  ArrowUpRight, ArrowDownRight, Plus, ExternalLink, ChevronRight,
+} from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts';
+import { reconciliationService } from '../services/reconciliation';
 import { useAuth } from '../contexts/AuthContext';
-import {
-  reconciliationService,
-  Organization,
-  BankAccount,
-  Reconciliation,
-} from '../services/reconciliation';
-import { Button } from '../components/ui/Button';
+import { useOrganizations } from '../hooks/useOrganizations';
+import { format, parseISO } from 'date-fns';
+import PageHeader from '../components/layout/PageHeader';
 import NewReconciliationDialog from '../components/NewReconciliationDialog';
-import { TrendingUp, Plus, Search } from 'lucide-react';
+import { cn } from '../utils';
+
+const CHART_DATA = [
+  { month: 'Oct', bank: 820000, ledger: 800000 },
+  { month: 'Nov', bank: 950000, ledger: 930000 },
+  { month: 'Dec', bank: 1100000, ledger: 1080000 },
+  { month: 'Jan', bank: 880000, ledger: 860000 },
+  { month: 'Feb', bank: 1050000, ledger: 1020000 },
+  { month: 'Mar', bank: 1200000, ledger: 1170000 },
+  { month: 'Apr', bank: 1380000, ledger: 1350000 },
+];
+
+const ANOMALY_DATA = [
+  { name: 'Duplicate', value: 32, color: '#EF4444' },
+  { name: 'Missing', value: 25, color: '#F59E0B' },
+  { name: 'Timing', value: 21, color: '#3B82F6' },
+  { name: 'Outlier', value: 14, color: '#8B5CF6' },
+  { name: 'Suspicious', value: 8, color: '#10B981' },
+];
+
+const STATUS_MAP: Record<string, { label: string; cls: string }> = {
+  pending: { label: 'Pending', cls: 'bg-surface-100 text-surface-600' },
+  in_progress: { label: 'In Progress', cls: 'bg-[#EFF6FF] text-[#2563EB]' },
+  completed: { label: 'Completed', cls: 'bg-success-50 text-success-600' },
+  failed: { label: 'Failed', cls: 'bg-danger-50 text-danger-600' },
+};
+
+const PKR = (n: number) =>
+  new Intl.NumberFormat('en-PK', { maximumFractionDigits: 0 }).format(n);
 
 const Dashboard: React.FC = () => {
-  const { user, logout, activeOrgId, setActiveOrgId } = useAuth();
   const navigate = useNavigate();
-
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [lastReconciliation, setLastReconciliation] = useState<Reconciliation | null>(null);
-
+  const { activeOrgId } = useAuth();
+  useOrganizations();
   const [openNewRecon, setOpenNewRecon] = useState(false);
-  const [openNewOrg, setOpenNewOrg] = useState(false);
-  const [openNewBank, setOpenNewBank] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
-  const [newOrgName, setNewOrgName] = useState('');
-  const [newOrgCurrency, setNewOrgCurrency] = useState('PKR');
-  const [newBankName, setNewBankName] = useState('');
-  const [newBankAccountName, setNewBankAccountName] = useState('');
-  const [newBankAccountNumber, setNewBankAccountNumber] = useState('');
-  const [newBankCurrency, setNewBankCurrency] = useState('PKR');
-  const [newBankTolerance, setNewBankTolerance] = useState<number>(3);
-  const [creating, setCreating] = useState(false);
-  const [creationError, setCreationError] = useState('');
+  const { data: reconciliations = [], isLoading: reconLoading } = useQuery({
+    queryKey: ['reconciliations', activeOrgId],
+    queryFn: () => reconciliationService.listReconciliations({ org_id: activeOrgId ?? undefined }),
+    enabled: !!activeOrgId,
+  });
 
-  useEffect(() => {
-    void loadOrganizations();
-  }, []);
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ['bankAccounts', activeOrgId],
+    queryFn: () => reconciliationService.getBankAccounts(activeOrgId!),
+    enabled: !!activeOrgId,
+  });
 
-  useEffect(() => {
-    if (selectedOrg) {
-      void loadBankAccounts(selectedOrg.id);
-    }
-  }, [selectedOrg]);
+  const totalRecons = reconciliations.length;
+  const activeAnomalies = reconciliations.reduce((s, r) => s + (r.anomaly_count || 0), 0);
+  const totalUnmatched = reconciliations.reduce((s, r) => s + r.unmatched_bank_count, 0);
+  const avgMatchRate =
+    reconciliations.length > 0
+      ? Math.round(
+          reconciliations.reduce((s, r) => {
+            const total = r.total_bank_transactions;
+            return s + (total > 0 ? (r.matched_count / total) * 100 : 0);
+          }, 0) / reconciliations.length,
+        )
+      : 0;
 
-  const loadOrganizations = async () => {
-    try {
-      const orgs = await reconciliationService.getOrganizations();
-      setOrganizations(orgs);
+  const today = new Date();
+  const dateLabel = format(today, 'EEE, dd MMM yyyy');
 
-      if (orgs.length > 0) {
-        let initialOrg: Organization | null = null;
-
-        if (activeOrgId) {
-          initialOrg = orgs.find((o) => o.id === activeOrgId) || orgs[0];
-        } else {
-          initialOrg = orgs[0];
+  return (
+    <div className="flex flex-col min-h-screen bg-surface-50">
+      <PageHeader
+        title="Dashboard"
+        subtitle={dateLabel}
+        actions={
+          <button
+            onClick={() => setOpenNewRecon(true)}
+            disabled={bankAccounts.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-sm font-semibold rounded-md transition-all"
+          >
+            <Plus size={15} /> New Reconciliation
+          </button>
         }
-
-        setSelectedOrg(initialOrg);
-        setActiveOrgId(initialOrg.id);
-      }
-    } catch (error) {
-      console.error('Load organizations failed:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadBankAccounts = async (orgId: number) => {
-    try {
-      const accounts = await reconciliationService.getBankAccounts(orgId);
-      setBankAccounts(accounts);
-    } catch (error) {
-      console.error('Load bank accounts failed:', error);
-    }
-  };
-
-  const handleCreateOrganization = async () => {
-    if (!newOrgName.trim()) {
-      setCreationError('Organization name is required');
-      return;
-    }
-    setCreating(true);
-    setCreationError('');
-    try {
-      const res = await reconciliationService.createOrganization({
-        name: newOrgName.trim(),
-        currency: newOrgCurrency || undefined,
-      });
-      setOrganizations((prev) => [...prev, res]);
-      setSelectedOrg(res);
-      setActiveOrgId(res.id);
-      setOpenNewOrg(false);
-      setNewOrgName('');
-    } catch (err: any) {
-      setCreationError(err?.response?.data?.detail || 'Failed to create organization');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleCreateBankAccount = async () => {
-    if (!selectedOrg) {
-      setCreationError('Select or create an organization first');
-      return;
-    }
-    if (!newBankAccountName.trim()) {
-      setCreationError('Account name is required');
-      return;
-    }
-    setCreating(true);
-    setCreationError('');
-    try {
-      const res = await reconciliationService.createBankAccount(selectedOrg.id, {
-        account_name: newBankAccountName.trim(),
-        account_number: newBankAccountNumber.trim() || null,
-        bank_name: newBankName.trim() || null,
-        currency: newBankCurrency || null,
-        date_tolerance_days: newBankTolerance || null,
-      });
-      setBankAccounts((prev) => [...prev, res]);
-      setOpenNewBank(false);
-      setNewBankAccountName('');
-      setNewBankAccountNumber('');
-      setNewBankName('');
-    } catch (err: any) {
-      setCreationError(err?.response?.data?.detail || 'Failed to create bank account');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleReconciliationCreated = (recon: Reconciliation) => {
-    setLastReconciliation(recon);
-    setOpenNewRecon(false);
-    navigate(`/reconciliations/${recon.id}`);
-  };
-
-  if (loading) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-          bgcolor: '#F5F7FA',
-        }}
-      >
-        <LinearProgress sx={{ width: 400 }} />
-      </Box>
-    );
-  }
-
-  const matchRate = 87;
-  const anomalies = 3;
-  const hasBankAccounts = bankAccounts.length > 0;
-
-  const latestNeedsSetup =
-    lastReconciliation &&
-    (lastReconciliation.total_bank_transactions === 0 ||
-      lastReconciliation.total_ledger_transactions === 0);
-
-  const handleOrgSelect = (orgId: number) => {
-    const org = organizations.find((o) => o.id === orgId) || null;
-    setSelectedOrg(org);
-    setActiveOrgId(orgId);
-    if (org) {
-      void loadBankAccounts(org.id);
-    }
-  };
-
-  return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F5F7FA', color: '#343C6A' }}>
-      {/* Left sidebar with real navigation */}
-      <Box
-        sx={{
-          width: 250,
-          bgcolor: '#FFFFFF',
-          borderRight: '1px solid #E6EFF5',
-          display: 'flex',
-          flexDirection: 'column',
-          py: 3,
-        }}
-      >
-        {/* Logo */}
-        <Box sx={{ px: 3, display: 'flex', alignItems: 'center', mb: 4 }}>
-          <img
-            src="/dashboard-logo.png"
-            alt="Refinely logo"
-            style={{ width: 36, height: 36, marginRight: 12 }}
-          />
-          <Typography
-            sx={{
-              fontFamily: 'var(--font-roboto-slab)',
-              fontSize: 24,
-              fontWeight: 500,
-            }}
-          >
-            Refinely
-          </Typography>
-        </Box>
-
-        {/* Nav items */}
-        <Box sx={{ px: 3 }}>
-          <NavItem label="Dashboard" to="/dashboard" />
-          <NavItem label="Organizations" to="/organizations" />
-          <NavItem label="Accounts" to="/bank-accounts" />
-          <NavItem label="Reconciliations" to="/reconciliations" />
-          <NavItem label="Matching" />
-          <NavItem label="Anomalies" />
-          <NavItem label="Assistant" />
-        </Box>
-
-        <Box sx={{ flexGrow: 1 }} />
-
-        {/* User footer */}
-        <Box sx={{ px: 3, pb: 2 }}>
-          <Divider sx={{ mb: 2 }} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
-            <Avatar sx={{ width: 32, height: 32 }}>
-              {user?.full_name?.[0] || 'U'}
-            </Avatar>
-            <Box>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {user?.full_name || 'User'}
-              </Typography>
-              <Typography variant="caption" sx={{ color: '#8BA3CB' }}>
-                {selectedOrg?.name || 'No organization'}
-              </Typography>
-            </Box>
-          </Box>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={logout}
-            sx={{ width: '100%', borderColor: '#E6EFF5', color: '#343C6A' }}
-          >
-            Logout
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Right main content */}
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Top bar with org switcher */}
-        <AppBar
-          position="static"
-          elevation={0}
-          sx={{
-            bgcolor: '#FFFFFF',
-            color: '#343C6A',
-            borderBottom: '1px solid #E6EFF5',
-          }}
-        >
-          <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', minHeight: 80 }}>
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                Overview
-              </Typography>
-              {selectedOrg && (
-                <Typography variant="body2" sx={{ color: '#8BA3CB' }}>
-                  Working in: {selectedOrg.name} ({selectedOrg.currency || 'PKR'})
-                </Typography>
-              )}
-            </Box>
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <TextField
-                select
-                size="small"
-                label="Organization"
-                value={selectedOrg ? selectedOrg.id : ''}
-                onChange={(e) => handleOrgSelect(Number(e.target.value))}
-                sx={{ minWidth: 220 }}
-              >
-                {organizations.map((org) => (
-                  <MenuItem key={org.id} value={org.id}>
-                    {org.name} ({org.currency || 'PKR'})
-                  </MenuItem>
-                ))}
-              </TextField>
-
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  px: 2.5,
-                  py: 1,
-                  borderRadius: 999,
-                  bgcolor: '#F5F7FA',
-                  minWidth: 220,
-                  color: '#8BA3CB',
-                  fontSize: 14,
-                }}
-              >
-                <Search size={18} />
-                <Typography sx={{ ml: 1 }}>Search for something</Typography>
-              </Box>
-
-              <Button
-                variant="primary"
-                size="sm"
-                icon={<Plus size={16} />}
-                onClick={() => setOpenNewRecon(true)}
-                disabled={!hasBankAccounts}
-                sx={{
-                  borderRadius: 999,
-                  px: 3,
-                  bgcolor: '#1814F3',
-                  '&:hover': { bgcolor: '#0f0cc7' },
-                }}
-              >
-                New Reconciliation
-              </Button>
-            </Box>
-          </Toolbar>
-        </AppBar>
-
-        {/* Content area */}
-        <Box sx={{ flexGrow: 1, bgcolor: '#F5F7FA', p: 3 }}>
-          <Container maxWidth="lg" sx={{ px: 0 }}>
-            {/* KPI cards */}
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} sm={6} md={3}>
-                <MetricCard
-                  label="Reconciliation"
-                  value="1,248"
-                  iconBg="#FFE0F0"
-                  iconColor="#FF5C8D"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <MetricCard
-                  label="Unmatched Amount"
-                  value="$12,750"
-                  iconBg="#FFF4DE"
-                  iconColor="#FFA500"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <MetricCard
-                  label="Anomalies"
-                  value={anomalies.toString()}
-                  iconBg="#E2F4FF"
-                  iconColor="#2D60FF"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <MetricCard
-                  label="Match rate"
-                  value={`${matchRate}%`}
-                  iconBg="#E6FFF4"
-                  iconColor="#16A34A"
-                />
-              </Grid>
-            </Grid>
-
-            {/* Charts row */}
-            <Grid container spacing={2} sx={{ mb: 3 }}>
-              <Grid item xs={12} md={8}>
-                <Paper
-                  sx={{
-                    borderRadius: 3,
-                    p: 2.5,
-                    bgcolor: '#FFFFFF',
-                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
-                  }}
-                >
-                  <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
-                    Cash Balance Over Time
-                  </Typography>
-                  <Box
-                    sx={{
-                      height: 260,
-                      borderRadius: 3,
-                      bgcolor: 'linear-gradient(180deg,#F8FAFC,#EFF3FF)',
-                      border: '1px solid #EFF3F9',
-                    }}
-                  />
-                </Paper>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Paper
-                  sx={{
-                    borderRadius: 3,
-                    p: 2.5,
-                    bgcolor: '#FFFFFF',
-                    boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
-                  }}
-                >
-                  <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
-                    Anomalies by Type
-                  </Typography>
-                  <Box
-                    sx={{
-                      height: 260,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: 170,
-                        height: 170,
-                        borderRadius: '50%',
-                        background:
-                          'conic-gradient(#2D60FF 0 110deg,#FFB020 110deg 210deg,#FF5C8D 210deg 280deg,#10B981 280deg 360deg)',
-                        position: 'relative',
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          inset: 26,
-                          borderRadius: '50%',
-                          bgcolor: '#FFFFFF',
-                        }}
-                      />
-                    </Box>
-                    <Box sx={{ ml: 2 }}>
-                      <LegendDot color="#2D60FF" label="Fraud" />
-                      <LegendDot color="#FF5C8D" label="Duplicate" />
-                      <LegendDot color="#FFB020" label="Timing" />
-                      <LegendDot color="#10B981" label="Other" />
-                    </Box>
-                  </Box>
-                </Paper>
-              </Grid>
-            </Grid>
-
-            {/* Recent reconciliations table */}
-            <Paper
-              sx={{
-                borderRadius: 3,
-                p: 2.5,
-                bgcolor: '#FFFFFF',
-                boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
-              }}
-            >
-              <Typography sx={{ fontWeight: 600, mb: 1.5 }}>
-                Recent Reconciliations
-              </Typography>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Description</TableCell>
-                    <TableCell>Transaction ID</TableCell>
-                    <TableCell>Entity</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                    <TableCell>Receipt</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  <RecentRow
-                    description="Spotify Subscription"
-                    id="#12548796"
-                    entity="Shopping"
-                    status="Matched"
-                    date="28 Jan, 12:30 AM"
-                    amount="- $2,500"
-                    positive={false}
-                  />
-                  <RecentRow
-                    description="Freepik Sales"
-                    id="#12548796"
-                    entity="Transfer"
-                    status="Unmatch"
-                    date="25 Jan, 10:40 PM"
-                    amount="+ $750"
-                    positive
-                  />
-                  <RecentRow
-                    description="Mobile Service"
-                    id="#12548796"
-                    entity="Service"
-                    status="Matched"
-                    date="20 Jan, 10:40 PM"
-                    amount="- $150"
-                    positive={false}
-                  />
-                  <RecentRow
-                    description="Wilson"
-                    id="#12548796"
-                    entity="Transfer"
-                    status="Matched"
-                    date="18 Jan, 03:29 PM"
-                    amount="- $1,050"
-                    positive={false}
-                  />
-                  <RecentRow
-                    description="Emily"
-                    id="#12548796"
-                    entity="Transfer"
-                    status="Anomaly"
-                    date="14 Jan, 10:14 PM"
-                    amount="+ $840"
-                    positive
-                  />
-                </TableBody>
-              </Table>
-            </Paper>
-          </Container>
-
-          {/* Dialogs */}
-          <NewReconciliationDialog
-            open={openNewRecon}
-            bankAccounts={bankAccounts}
-            onClose={() => setOpenNewRecon(false)}
-            onCreated={handleReconciliationCreated}
-          />
-
-          <Dialog open={openNewOrg} onClose={() => setOpenNewOrg(false)} maxWidth="sm" fullWidth>
-            <DialogTitle>New Organization</DialogTitle>
-            <DialogContent>
-              {creationError && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {creationError}
-                </Alert>
-              )}
-              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
-                  label="Organization Name"
-                  fullWidth
-                  value={newOrgName}
-                  onChange={(e) => setNewOrgName(e.target.value)}
-                />
-                <TextField
-                  label="Currency"
-                  fullWidth
-                  value={newOrgCurrency}
-                  onChange={(e) => setNewOrgCurrency(e.target.value)}
-                  helperText="e.g. PKR, USD"
-                />
-              </Box>
-            </DialogContent>
-            <DialogActions sx={{ p: 3 }}>
-              <Button variant="outline" size="sm" onClick={() => setOpenNewOrg(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCreateOrganization}
-                loading={creating}
-              >
-                Create
-              </Button>
-            </DialogActions>
-          </Dialog>
-
-          <Dialog open={openNewBank} onClose={() => setOpenNewBank(false)} maxWidth="sm" fullWidth>
-            <DialogTitle>New Bank Account</DialogTitle>
-            <DialogContent>
-              {creationError && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {creationError}
-                </Alert>
-              )}
-              <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <TextField
-                  label="Account Name"
-                  fullWidth
-                  value={newBankAccountName}
-                  onChange={(e) => setNewBankAccountName(e.target.value)}
-                />
-                <TextField
-                  label="Account Number"
-                  fullWidth
-                  value={newBankAccountNumber}
-                  onChange={(e) => setNewBankAccountNumber(e.target.value)}
-                />
-                <TextField
-                  label="Bank Name"
-                  fullWidth
-                  value={newBankName}
-                  onChange={(e) => setNewBankName(e.target.value)}
-                />
-                <TextField
-                  label="Currency"
-                  fullWidth
-                  value={newBankCurrency}
-                  onChange={(e) => setNewBankCurrency(e.target.value)}
-                />
-                <TextField
-                  label="Date Tolerance (days)"
-                  type="number"
-                  fullWidth
-                  value={newBankTolerance}
-                  onChange={(e) => setNewBankTolerance(Number(e.target.value) || 0)}
-                />
-              </Box>
-            </DialogContent>
-            <DialogActions sx={{ p: 3 }}>
-              <Button variant="outline" size="sm" onClick={() => setOpenNewBank(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleCreateBankAccount}
-                loading={creating}
-              >
-                Create
-              </Button>
-            </DialogActions>
-          </Dialog>
-        </Box>
-      </Box>
-    </Box>
-  );
-};
-
-/* --- Small presentational helpers --- */
-
-interface NavItemProps {
-  label: string;
-  to?: string;
-}
-
-const NavItem: React.FC<NavItemProps> = ({ label, to }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const isActive = to ? location.pathname.startsWith(to) : false;
-
-  return (
-    <Box
-      onClick={to ? () => navigate(to) : undefined}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        height: 44,
-        borderRadius: 999,
-        px: 2.5,
-        mb: 1,
-        bgcolor: isActive ? '#2D60FF' : 'transparent',
-        color: isActive ? '#FFFFFF' : '#B1B1B1',
-        cursor: to ? 'pointer' : 'default',
-        fontSize: 15,
-        fontWeight: isActive ? 600 : 500,
-        transition: 'background 0.15s',
-        '&:hover': {
-          bgcolor: to ? (isActive ? '#2448cc' : '#F5F7FA') : 'transparent',
-          color: to ? (isActive ? '#FFFFFF' : '#343C6A') : '#B1B1B1',
-        },
-      }}
-    >
-      <Box
-        sx={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          bgcolor: isActive ? '#FFFFFF' : '#D0D7E2',
-          mr: 1.5,
-        }}
       />
-      {label}
-    </Box>
+
+      <div className="flex-1 p-8 space-y-6">
+        {/* ── KPI Row ─────────────────────────────────────── */}
+        <div className="grid grid-cols-4 gap-5">
+          <KpiCard
+            label="Total Reconciliations"
+            value={totalRecons.toString()}
+            trend="+3 this month"
+            trendUp
+            icon={<RefreshCcw size={20} />}
+            iconBg="bg-brand-50"
+            iconColor="text-brand-600"
+            loading={reconLoading}
+          />
+          <KpiCard
+            label="Unmatched Transactions"
+            value={PKR(totalUnmatched)}
+            trend="-8.2% from last month"
+            trendUp
+            icon={<DollarSign size={20} />}
+            iconBg="bg-warning-50"
+            iconColor="text-warning-600"
+            loading={reconLoading}
+          />
+          <KpiCard
+            label="Active Anomalies"
+            value={activeAnomalies.toString()}
+            trend="2 High, 1 Medium"
+            trendUp={false}
+            valueColor={activeAnomalies > 0 ? 'text-danger-600' : undefined}
+            icon={<AlertTriangle size={20} />}
+            iconBg="bg-danger-50"
+            iconColor="text-danger-600"
+            loading={reconLoading}
+          />
+          <KpiCard
+            label="Avg Match Rate"
+            value={`${avgMatchRate}%`}
+            trend="+4.2% from last month"
+            trendUp
+            valueColor={avgMatchRate > 0 ? 'text-success-600' : undefined}
+            icon={<TrendingUp size={20} />}
+            iconBg="bg-success-50"
+            iconColor="text-success-600"
+            loading={reconLoading}
+          />
+        </div>
+
+        {/* ── Charts Row ────────────────────────────────── */}
+        <div className="grid grid-cols-12 gap-5">
+          {/* Area Chart */}
+          <div className="col-span-8 card p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-semibold text-surface-800">Cash Balance Over Time</h2>
+              <div className="flex gap-1 bg-surface-100 p-0.5 rounded-md">
+                {(['7D','30D','90D','1Y'] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPeriod(p)}
+                    className={cn(
+                      'px-3 py-1 text-xs font-medium rounded transition-colors',
+                      period === p ? 'bg-white text-surface-800 shadow-xs' : 'text-surface-500 hover:text-surface-700',
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={CHART_DATA} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="bankGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2D60FF" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="#2D60FF" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="ledgerGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 10, fontSize: 13 }}
+                  formatter={(v: any) => [`PKR ${PKR(Number(v))}`]}
+                />
+                <Area type="monotone" dataKey="bank" stroke="#2D60FF" strokeWidth={2} fill="url(#bankGrad)" name="Bank Balance" />
+                <Area type="monotone" dataKey="ledger" stroke="#10B981" strokeWidth={2} fill="url(#ledgerGrad)" name="Ledger Balance" />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Donut Chart */}
+          <div className="col-span-4 card p-6">
+            <h2 className="text-base font-semibold text-surface-800 mb-4">Anomalies by Type</h2>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={ANOMALY_DATA}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {ANOMALY_DATA.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ border: '1px solid #E2E8F0', borderRadius: 10, fontSize: 13 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="mt-2 space-y-1.5">
+              {ANOMALY_DATA.map((d) => (
+                <div key={d.name} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
+                    <span className="text-surface-600">{d.name}</span>
+                  </div>
+                  <span className="text-surface-800 font-medium">{d.value}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Recent Reconciliations ─────────────────────── */}
+        <div className="card">
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-surface-100">
+            <h2 className="text-base font-semibold text-surface-800">Recent Reconciliations</h2>
+            <button
+              onClick={() => navigate('/reconciliations')}
+              className="flex items-center gap-1 text-sm text-brand-500 hover:text-brand-600 font-medium"
+            >
+              View all <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {reconLoading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="skeleton h-10 w-full" />
+              ))}
+            </div>
+          ) : reconciliations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <RefreshCcw size={40} className="text-surface-300 mb-3" />
+              <p className="text-base font-semibold text-surface-700 mb-1">No reconciliations yet</p>
+              <p className="text-sm text-surface-400 mb-5">Create your first reconciliation to get started.</p>
+              <button
+                onClick={() => setOpenNewRecon(true)}
+                disabled={bankAccounts.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-sm font-semibold rounded-md"
+              >
+                <Plus size={14} /> New Reconciliation
+              </button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-surface-50 border-b border-surface-200">
+                    {['#ID', 'Period', 'Transactions', 'Matched', 'Match Rate', 'Anomalies', 'Status', ''].map((h) => (
+                      <th key={h} className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-surface-500">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-100">
+                  {reconciliations.slice(0, 5).map((r) => {
+                    const rate = r.total_bank_transactions > 0
+                      ? Math.round((r.matched_count / r.total_bank_transactions) * 100)
+                      : 0;
+                    const status = STATUS_MAP[r.status] ?? { label: r.status, cls: 'bg-surface-100 text-surface-600' };
+                    return (
+                      <tr
+                        key={r.id}
+                        className="hover:bg-surface-50 cursor-pointer transition-colors"
+                        onClick={() => navigate(`/reconciliations/${r.id}`)}
+                      >
+                        <td className="px-6 py-4 text-sm font-mono font-semibold text-brand-600">#{r.id}</td>
+                        <td className="px-6 py-4 text-sm text-surface-700">
+                          {format(parseISO(r.period_start), 'dd MMM')} – {format(parseISO(r.period_end), 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-surface-700">
+                          {r.total_bank_transactions} / {r.total_ledger_transactions}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-surface-700">{r.matched_count}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-1.5 bg-surface-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-success-500 rounded-full" style={{ width: `${rate}%` }} />
+                            </div>
+                            <span className="text-sm text-surface-700 font-medium">{rate}%</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {r.anomaly_count > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[20px] px-1.5 py-0.5 text-xs font-semibold bg-danger-50 text-danger-600 rounded-full">
+                              {r.anomaly_count}
+                            </span>
+                          ) : (
+                            <span className="text-surface-400 text-sm">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${status.cls}`}>
+                            {status.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); navigate(`/reconciliations/${r.id}`); }}
+                            className="flex items-center gap-1 text-xs text-brand-500 hover:text-brand-600 font-medium"
+                          >
+                            View <ExternalLink size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <NewReconciliationDialog
+        open={openNewRecon}
+        bankAccounts={bankAccounts}
+        onClose={() => setOpenNewRecon(false)}
+        onCreated={(r) => { setOpenNewRecon(false); navigate(`/reconciliations/${r.id}`); }}
+      />
+    </div>
   );
 };
 
-interface MetricCardProps {
+/* ── KPI Card ──────────────────────────────────────────────────────── */
+interface KpiCardProps {
   label: string;
   value: string;
+  trend: string;
+  trendUp: boolean;
+  icon: React.ReactNode;
   iconBg: string;
   iconColor: string;
+  valueColor?: string;
+  loading?: boolean;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ label, value, iconBg, iconColor }) => (
-  <Paper
-    sx={{
-      borderRadius: 3,
-      p: 2,
-      bgcolor: '#FFFFFF',
-      boxShadow: '0 10px 30px rgba(15, 23, 42, 0.06)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    }}
-  >
-    <Box>
-      <Typography sx={{ fontSize: 14, color: '#8BA3CB' }}>{label}</Typography>
-      <Typography sx={{ fontSize: 22, fontWeight: 600, mt: 0.5 }}>{value}</Typography>
-    </Box>
-    <Box
-      sx={{
-        width: 46,
-        height: 46,
-        borderRadius: '50%',
-        bgcolor: iconBg,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: iconColor,
-      }}
-    >
-      <TrendingUp size={20} />
-    </Box>
-  </Paper>
+const KpiCard: React.FC<KpiCardProps> = ({ label, value, trend, trendUp, icon, iconBg, iconColor, valueColor, loading }) => (
+  <div className="card card-hover p-5">
+    {loading ? (
+      <div className="space-y-3">
+        <div className="skeleton h-4 w-24" />
+        <div className="skeleton h-8 w-16" />
+        <div className="skeleton h-3 w-20" />
+      </div>
+    ) : (
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-[13px] text-surface-500 font-medium mb-1.5">{label}</p>
+          <p className={cn('text-[28px] font-bold leading-none mb-2', valueColor ?? 'text-surface-900')}>
+            {value}
+          </p>
+          <div className={cn('flex items-center gap-1 text-xs font-medium', trendUp ? 'text-success-600' : 'text-surface-400')}>
+            {trendUp ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+            {trend}
+          </div>
+        </div>
+        <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0', iconBg, iconColor)}>
+          {icon}
+        </div>
+      </div>
+    )}
+  </div>
 );
-
-const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
-  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-    <Box
-      sx={{
-        width: 10,
-        height: 10,
-        borderRadius: '50%',
-        bgcolor: color,
-        mr: 1,
-      }}
-    />
-    <Typography sx={{ fontSize: 13, color: '#8BA3CB' }}>{label}</Typography>
-  </Box>
-);
-
-interface RecentRowProps {
-  description: string;
-  id: string;
-  entity: string;
-  status: 'Matched' | 'Unmatch' | 'Anomaly';
-  date: string;
-  amount: string;
-  positive: boolean;
-}
-
-const RecentRow: React.FC<RecentRowProps> = ({
-  description,
-  id,
-  entity,
-  status,
-  date,
-  amount,
-  positive,
-}) => {
-  const statusColor =
-    status === 'Matched' ? '#16A34A' : status === 'Anomaly' ? '#EF4444' : '#F59E0B';
-  const statusBg =
-    status === 'Matched' ? '#E6FFF4' : status === 'Anomaly' ? '#FFE4E6' : '#FFF7E6';
-
-  return (
-    <TableRow sx={{ '&:last-child td': { borderBottom: 0 } }}>
-      <TableCell>{description}</TableCell>
-      <TableCell>{id}</TableCell>
-      <TableCell>{entity}</TableCell>
-      <TableCell>
-        <Chip
-          label={status}
-          size="small"
-          sx={{
-            bgcolor: statusBg,
-            color: statusColor,
-            fontSize: 12,
-            fontWeight: 500,
-          }}
-        />
-      </TableCell>
-      <TableCell>{date}</TableCell>
-      <TableCell align="right" sx={{ color: positive ? '#16A34A' : '#EF4444' }}>
-        {amount}
-      </TableCell>
-      <TableCell>
-        <Button variant="outline" size="xs">
-          Download
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-};
 
 export default Dashboard;

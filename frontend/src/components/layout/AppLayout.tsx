@@ -1,38 +1,21 @@
 import React from 'react';
-import { Box, useMediaQuery } from '@mui/material';
+import Sidebar from './Sidebar';
 
 interface AppLayoutProps {
   children: React.ReactNode;
-  sidebar?: React.ReactNode;
 }
 
-const AppLayout: React.FC<AppLayoutProps> = ({ children, sidebar }) => {
-  const isMobile = useMediaQuery('(max-width: 768px)');
-
+const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#FAFBFC' }}>
-      {!isMobile && sidebar && (
-        <Box
-          component="aside"
-          sx={{
-            width: 280,
-            borderRight: '1px solid #E5E7EB',
-            bgcolor: 'white',
-          }}
-        >
-          {sidebar}
-        </Box>
-      )}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          overflow: 'auto',
-        }}
+    <div className="flex min-h-screen bg-surface-50">
+      <Sidebar />
+      <main
+        className="flex-1 flex flex-col min-h-screen overflow-auto"
+        style={{ marginLeft: 'var(--sidebar-width)' }}
       >
         {children}
-      </Box>
-    </Box>
+      </main>
+    </div>
   );
 };
 

@@ -1,187 +1,279 @@
-// src/pages/BankAccounts.tsx
 import React, { useState } from 'react';
-import {
-  Box,
-  Typography,
-  Paper,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../contexts/AuthContext';
-import AppLayout from '../components/layout/AppLayout';
-import { Button } from '../components/ui/Button';
+import { CreditCard, Plus, X, RefreshCcw } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { reconciliationService } from '../services/reconciliation';
+import { useAuth } from '../contexts/AuthContext';
+import { useOrganizations } from '../hooks/useOrganizations';
+import PageHeader from '../components/layout/PageHeader';
 
-interface BankAccount {
-  id: number;
-  name: string;
-  bank_name: string;
-  account_number: string;
-  created_at: string;
-}
-
-const fetchBankAccounts = async (): Promise<BankAccount[]> => {
-  const res = await apiClient.get('/reconciliations/bank-accounts');
-  return res.data;
-};
-
-const createBankAccount = async (data: {
-  name: string;
-  bank_name: string;
-  account_number: string;
-}) => {
-  const res = await apiClient.post('/reconciliations/bank-accounts', data);
-  return res.data as BankAccount;
-};
+const CURRENCIES = ['PKR', 'USD', 'EUR', 'GBP', 'AED', 'SAR', 'INR'];
 
 const BankAccountsPage: React.FC = () => {
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { activeOrgId } = useAuth();
+  const { organizations } = useOrganizations();
+  const qc = useQueryClient();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [error, setError] = useState('');
+
+  // form state
+  const [accountName, setAccountName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [currency, setCurrency] = useState('PKR');
+  const [tolerance, setTolerance] = useState(3);
+
+  const activeOrg = organizations.find((o) => o.id === activeOrgId);
+
   const { data: accounts = [], isLoading } = useQuery({
-    queryKey: ['bank-accounts'],
-    queryFn: fetchBankAccounts,
+    queryKey: ['bankAccounts', activeOrgId],
+    queryFn: () => reconciliationService.getBankAccounts(activeOrgId!),
+    enabled: !!activeOrgId,
   });
 
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [bankName, setBankName] = useState('');
-  const [accountNumber, setAccountNumber] = useState('');
-
-  const mutation = useMutation({
-    mutationFn: createBankAccount,
+  const createMutation = useMutation({
+    mutationFn: (data: Parameters<typeof reconciliationService.createBankAccount>[1]) =>
+      reconciliationService.createBankAccount(activeOrgId!, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bank-accounts'] });
-      setOpen(false);
-      setName('');
-      setBankName('');
-      setAccountNumber('');
+      qc.invalidateQueries({ queryKey: ['bankAccounts', activeOrgId] });
+      setDrawerOpen(false);
+      resetForm();
+    },
+    onError: (err: any) => {
+      setError(err?.response?.data?.detail || 'Failed to create bank account');
     },
   });
 
+  const resetForm = () => {
+    setAccountName(''); setAccountNumber(''); setBankName('');
+    setCurrency('PKR'); setTolerance(3); setError('');
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate({
-      name,
-      bank_name: bankName,
-      account_number: accountNumber,
+    if (!accountName.trim()) { setError('Account name is required'); return; }
+    if (!activeOrgId) { setError('Select an organization first'); return; }
+    setError('');
+    createMutation.mutate({
+      account_name: accountName.trim(),
+      account_number: accountNumber.trim() || null,
+      bank_name: bankName.trim() || null,
+      currency,
+      date_tolerance_days: tolerance,
     });
   };
 
   return (
-    <AppLayout>
-      <Box sx={{ p: 3 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 3,
-          }}
-        >
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
-              Bank accounts
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Accounts used for reconciliations.
-            </Typography>
-          </Box>
-          <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
-            Add bank account
-          </Button>
-        </Box>
+    <div className="flex flex-col min-h-screen bg-surface-50">
+      <PageHeader
+        title="Bank Accounts"
+        subtitle={activeOrg ? `Accounts for ${activeOrg.name}` : 'Select an organization first'}
+        actions={
+          activeOrgId ? (
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md transition-all"
+            >
+              <Plus size={15} /> Add Bank Account
+            </button>
+          ) : undefined
+        }
+      />
 
-        <Paper sx={{ p: 2 }}>
-          {isLoading ? (
-            <Typography variant="body2">Loading bank accounts…</Typography>
-          ) : accounts.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No bank accounts yet. Add one to start reconciling.
-            </Typography>
-          ) : (
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Bank</TableCell>
-                  <TableCell>Account number</TableCell>
-                  <TableCell>Created at</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {accounts.map((acc) => (
-                  <TableRow key={acc.id}>
-                    <TableCell>{acc.name}</TableCell>
-                    <TableCell>{acc.bank_name}</TableCell>
-                    <TableCell>{acc.account_number}</TableCell>
-                    <TableCell>
-                      {new Date(acc.created_at).toLocaleString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </Paper>
+      <div className="flex-1 p-8">
+        {!activeOrgId ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <CreditCard size={48} className="text-surface-300 mb-4" />
+            <p className="text-base font-semibold text-surface-700 mb-2">No organization selected</p>
+            <p className="text-sm text-surface-400 mb-5">Select or create an organization first.</p>
+            <button
+              onClick={() => navigate('/organizations')}
+              className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md"
+            >
+              Go to Organizations
+            </button>
+          </div>
+        ) : isLoading ? (
+          <div className="grid grid-cols-3 gap-5">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="card p-6 space-y-3">
+                <div className="skeleton h-10 w-10 rounded-xl" />
+                <div className="skeleton h-5 w-36" />
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-4 w-20" />
+              </div>
+            ))}
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <CreditCard size={48} className="text-surface-300 mb-4" />
+            <p className="text-base font-semibold text-surface-700 mb-2">No bank accounts yet</p>
+            <p className="text-sm text-surface-400 mb-5">Add your first bank account to start reconciling.</p>
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md"
+            >
+              <Plus size={14} /> Add Bank Account
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-5">
+            {accounts.map((acc) => (
+              <div key={acc.id} className="card card-hover flex flex-col">
+                <div className="p-6 flex-1">
+                  <div className="w-10 h-10 rounded-xl bg-[#EEF2FF] flex items-center justify-center mb-4">
+                    <CreditCard size={18} className="text-brand-600" />
+                  </div>
+                  <h3 className="text-base font-bold text-surface-900 mb-1">{acc.account_name}</h3>
+                  {acc.bank_name && (
+                    <p className="text-sm text-surface-600 mb-0.5">{acc.bank_name}</p>
+                  )}
+                  {acc.account_number && (
+                    <p className="text-sm text-surface-400 font-mono mb-3">
+                      •••• {acc.account_number.slice(-4)}
+                    </p>
+                  )}
+                  <div className="space-y-1.5 pt-3 border-t border-surface-100">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-surface-500">Currency</span>
+                      <span className="font-medium text-surface-700">{acc.currency}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-surface-500">Date Tolerance</span>
+                      <span className="font-medium text-surface-700">±{acc.date_tolerance_days} days</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-surface-500">Added</span>
+                      <span className="text-surface-400">{format(parseISO(acc.created_at), 'dd MMM yyyy')}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-6 pb-5">
+                  <button
+                    onClick={() => navigate('/reconciliations')}
+                    className="w-full h-8 bg-brand-500 hover:bg-brand-600 rounded-md text-xs font-semibold text-white transition-colors flex items-center justify-center gap-1"
+                  >
+                    <RefreshCcw size={12} /> New Reconciliation →
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-        <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle>Create bank account</DialogTitle>
-          <Box component="form" onSubmit={handleCreate}>
-            <DialogContent>
-              <TextField
-                label="Name"
-                fullWidth
-                margin="normal"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-              <TextField
-                label="Bank name"
-                fullWidth
-                margin="normal"
-                required
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-              />
-              <TextField
-                label="Account number"
-                fullWidth
-                margin="normal"
-                required
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-              />
-            </DialogContent>
-            <DialogActions sx={{ p: 2.5, pt: 0 }}>
-              <Button
+      {/* ── Add Bank Account Drawer ─────────────────────── */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { setDrawerOpen(false); resetForm(); }} />
+          <div className="relative bg-white w-[420px] h-full shadow-xl flex flex-col animate-slide-in-right">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-surface-200">
+              <h2 className="text-lg font-bold text-surface-900">Add Bank Account</h2>
+              <button onClick={() => { setDrawerOpen(false); resetForm(); }} className="text-surface-400 hover:text-surface-700 p-1 rounded-md hover:bg-surface-100">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreate} className="flex-1 overflow-y-auto p-6 space-y-5">
+              {error && (
+                <div className="px-4 py-3 rounded-lg bg-danger-50 border border-danger-100 text-danger-600 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <fieldset className="space-y-4">
+                <legend className="text-sm font-semibold text-surface-700 mb-3">Account details</legend>
+                <div>
+                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">
+                    Account Name <span className="text-danger-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={accountName}
+                    onChange={(e) => setAccountName(e.target.value)}
+                    placeholder="e.g. Main Operations Account"
+                    required
+                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm placeholder-surface-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Account Number</label>
+                  <input
+                    type="text"
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value)}
+                    placeholder="e.g. 1234567890"
+                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm placeholder-surface-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">
+                    Bank Name <span className="text-danger-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    placeholder="e.g. Habib Bank Limited"
+                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm placeholder-surface-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Currency</label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                  >
+                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Date Tolerance (days)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30}
+                    value={tolerance}
+                    onChange={(e) => setTolerance(Number(e.target.value))}
+                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                  />
+                  <p className="text-xs text-surface-400 mt-1.5">
+                    How many days apart two transactions can be to still match
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Organization</label>
+                  <div className="h-10 px-3 flex items-center rounded-md border border-surface-100 bg-surface-50 text-sm text-surface-600">
+                    {activeOrg?.name ?? 'No organization'}
+                  </div>
+                </div>
+              </fieldset>
+            </form>
+
+            <div className="px-6 py-4 border-t border-surface-200 flex gap-3">
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setOpen(false)}
+                onClick={() => { setDrawerOpen(false); resetForm(); }}
+                className="flex-1 h-10 border border-surface-200 rounded-md text-sm font-medium text-surface-700 hover:bg-surface-50 transition-colors"
               >
                 Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                loading={mutation.isPending}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleCreate(e as any)}
+                disabled={createMutation.isPending}
+                className="flex-1 h-10 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-semibold rounded-md transition-colors"
               >
-                Create
-              </Button>
-            </DialogActions>
-          </Box>
-        </Dialog>
-      </Box>
-    </AppLayout>
+                {createMutation.isPending ? 'Saving...' : 'Save Bank Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
