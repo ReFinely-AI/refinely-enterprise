@@ -20,6 +20,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (accessToken: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   refetchUser: () => Promise<void>;
@@ -124,6 +125,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUser(me.data);
   };
 
+  // Google OAuth login
+  const loginWithGoogle = async (accessToken: string) => {
+    const res = await apiClient.post('/auth/google', { access_token: accessToken });
+    const jwtToken: string = res.data.access_token;
+    applyToken(jwtToken);
+
+    const me = await apiClient.get('/auth/me');
+    setUser(me.data);
+  };
+
   // Register (then login to get JWT)
   const register = async (data: RegisterData) => {
     // 1) Create the user (no token returned)
@@ -155,6 +166,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     token,
     isLoading,
     login,
+    loginWithGoogle,
     register,
     logout,
     refetchUser,

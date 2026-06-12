@@ -1,5 +1,5 @@
 import React from 'react';
-import { Grid, Box, Typography, Chip } from '@mui/material';
+import { Grid, Typography, Chip } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { BankTransaction, LedgerTransaction } from '../types/reconciliation';
 
@@ -94,7 +94,7 @@ const TransactionsSplitView: React.FC<Props> = ({
 
   return (
     <Grid container spacing={3} sx={{ p: 2 }}>
-      <Grid item xs={12} md={6}>
+      <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
           Bank Transactions
         </Typography>
@@ -117,7 +117,7 @@ const TransactionsSplitView: React.FC<Props> = ({
         />
       </Grid>
 
-      <Grid item xs={12} md={6}>
+      <Grid size={{ xs: 12, md: 6 }}>
         <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
           Ledger Transactions
         </Typography>

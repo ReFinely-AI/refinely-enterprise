@@ -25,9 +25,10 @@ class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str]
+    avatar_url: Optional[str] = None
     is_active: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True  # Allows ORM model → Pydantic conversion
 
@@ -42,3 +43,8 @@ class TokenPayload(BaseModel):
     """Schema for decoded JWT payload."""
     sub: int  # User ID
     exp: datetime
+
+
+class GoogleAuthRequest(BaseModel):
+    """Schema for Google OAuth token verification."""
+    access_token: str

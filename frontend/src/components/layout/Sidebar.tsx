@@ -12,6 +12,7 @@ import {
   ChevronDown,
   LogOut,
   Plus,
+  Receipt,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,12 +24,13 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   to: string;
-  badge?: number;
+  badge?: number | string;
   ai?: boolean;
 }
 
 const bottomNav: NavItem[] = [
-  { label: 'Settings', icon: <Settings size={18} />, to: '/settings' },
+  { label: 'Billing',  icon: <Receipt size={18} />,    to: '/billing' },
+  { label: 'Settings', icon: <Settings size={18} />,   to: '/settings' },
   { label: 'Help',     icon: <HelpCircle size={18} />, to: '/help' },
 ];
 
@@ -37,7 +39,11 @@ const NavLink: React.FC<NavItem & { collapsed?: boolean }> = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const isActive = location.pathname.startsWith(to);
+  const isActive = location.pathname === to || location.pathname.startsWith(to + '/');
+
+  const badgeDisplay = typeof badge === 'number'
+    ? badge > 99 ? '99+' : badge > 0 ? String(badge) : undefined
+    : badge;
 
   return (
     <button
@@ -62,19 +68,19 @@ const NavLink: React.FC<NavItem & { collapsed?: boolean }> = ({
         <span className="flex-1 text-left truncate">{label}</span>
       )}
 
-      {!collapsed && badge !== undefined && badge > 0 && (
+      {!collapsed && badgeDisplay && (
         <span className={cn(
-          'ml-auto text-xs font-semibold px-1.5 py-0.5 rounded-full min-w-[20px] text-center',
+          'ml-auto text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center leading-none',
           isActive
-            ? 'bg-white/20 text-white'
+            ? 'bg-white/25 text-white'
             : 'bg-danger-500 text-white',
         )}>
-          {badge}
+          {badgeDisplay}
         </span>
       )}
 
-      {collapsed && badge !== undefined && badge > 0 && (
-        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-danger-500" />
+      {collapsed && badgeDisplay && (
+        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-danger-500 ring-1 ring-white" />
       )}
     </button>
   );
@@ -92,14 +98,26 @@ const Sidebar: React.FC = () => {
     enabled: !!activeOrgId,
   });
 
-  const totalAnomalies = reconciliations.reduce((s, r) => s + r.anomaly_count, 0);
+  // Fetch unresolved anomaly count from the most recent reconciliations
+  const recentIds = reconciliations.slice(-5).map((r) => r.id);
+  const { data: unresolvedAnomalyCount = 0 } = useQuery({
+    queryKey: ['sidebarUnresolvedAnomalies', recentIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        reconciliations.slice(-5).map((r) => reconciliationService.getAnomalies(r.id)),
+      );
+      return results.flat().filter((a) => !a.is_resolved).length;
+    },
+    enabled: reconciliations.length > 0,
+    staleTime: 120_000,
+  });
 
   const mainNav: NavItem[] = [
     { label: 'Dashboard',       icon: <LayoutDashboard size={18} />, to: '/dashboard' },
     { label: 'Organizations',   icon: <Building2 size={18} />,       to: '/organizations' },
     { label: 'Bank Accounts',   icon: <CreditCard size={18} />,      to: '/bank-accounts' },
     { label: 'Reconciliations', icon: <RefreshCcw size={18} />,      to: '/reconciliations' },
-    { label: 'Anomalies',       icon: <AlertTriangle size={18} />,   to: '/anomalies', badge: totalAnomalies || undefined },
+    { label: 'Anomalies',       icon: <AlertTriangle size={18} />,   to: '/anomalies', badge: unresolvedAnomalyCount || undefined },
     { label: 'AI Copilot',      icon: <Sparkles size={18} />,        to: '/copilot', ai: true },
   ];
 
@@ -113,17 +131,15 @@ const Sidebar: React.FC = () => {
       className="fixed left-0 top-0 h-full flex flex-col bg-white border-r border-surface-200 z-30"
       style={{ width: 'var(--sidebar-width)' }}
     >
-      {/* ── Logo ─────────────────────────────────────────── */}
+      {/* ── Logo ─────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-5 h-[72px] border-b border-surface-100 flex-shrink-0">
-        <div className="w-8 h-8 rounded-xl bg-brand-500 flex items-center justify-center shadow-sm">
-          <RefreshCcw size={16} className="text-white" />
-        </div>
-        <span className="text-[18px] font-bold text-surface-900 tracking-tight">
+        <img src="/logo.png" alt="Refinely" className="h-8 w-auto" />
+        <span className="text-[17px] font-extrabold text-surface-900 tracking-tight">
           Refinely
         </span>
       </div>
 
-      {/* ── Org Switcher ──────────────────────────────────── */}
+      {/* ── Org Switcher ──────────────────────────────────────── */}
       <div className="px-3 py-3 border-b border-surface-100 flex-shrink-0">
         <div className="relative">
           <button
@@ -169,7 +185,7 @@ const Sidebar: React.FC = () => {
                     </div>
                     <span className="truncate">{org.name}</span>
                     {org.id === activeOrgId && (
-                      <span className="ml-auto text-xs text-brand-500">Active</span>
+                      <span className="ml-auto text-xs font-semibold text-brand-500">Active</span>
                     )}
                   </button>
                 ))}
@@ -177,7 +193,7 @@ const Sidebar: React.FC = () => {
               <div className="border-t border-surface-100 p-1">
                 <button
                   onClick={() => { navigate('/organizations'); setOrgMenuOpen(false); }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-brand-600 hover:bg-brand-50 transition-colors font-medium"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-brand-600 hover:bg-brand-50 transition-colors font-semibold"
                 >
                   <Plus size={14} />
                   New Organization
@@ -188,9 +204,9 @@ const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Main Navigation ───────────────────────────────── */}
+      {/* ── Main Navigation ───────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-surface-400 px-3 pb-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-surface-400 px-3 pb-2">
           Main Menu
         </p>
         {mainNav.map((item) => (
@@ -198,7 +214,7 @@ const Sidebar: React.FC = () => {
         ))}
 
         <div className="pt-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-surface-400 px-3 pb-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-surface-400 px-3 pb-2">
             Account
           </p>
           {bottomNav.map((item) => (
@@ -207,12 +223,20 @@ const Sidebar: React.FC = () => {
         </div>
       </nav>
 
-      {/* ── User Footer ───────────────────────────────────── */}
+      {/* ── User Footer ───────────────────────────────────────── */}
       <div className="border-t border-surface-100 p-3 flex-shrink-0">
-        <div className="flex items-center gap-3 px-2 py-1.5">
-          <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold">
-            {initials}
-          </div>
+        <div className="flex items-center gap-3 px-2 py-1.5 rounded-xl hover:bg-surface-50 transition-colors">
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={user.full_name ?? 'User'}
+              className="w-8 h-8 rounded-full flex-shrink-0 object-cover shadow-sm ring-2 ring-surface-100"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-ai-500 flex items-center justify-center flex-shrink-0 text-white text-xs font-bold shadow-sm">
+              {initials}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-surface-800 truncate leading-tight">
               {user?.full_name ?? 'User'}

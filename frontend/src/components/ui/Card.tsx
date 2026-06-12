@@ -7,6 +7,7 @@ interface CardProps {
   header?: ReactNode;
   footer?: ReactNode;
   variant?: 'default' | 'elevated';
+  onClick?: () => void | Promise<void>;
 }
 
 const Card: React.FC<CardProps> = ({
@@ -15,8 +16,10 @@ const Card: React.FC<CardProps> = ({
   header,
   footer,
   variant = 'default',
+  onClick,
 }) => (
   <div
+    onClick={onClick}
     className={cn(
       'bg-white rounded-2xl border border-gray-200 overflow-hidden',
       variant === 'elevated' && 'shadow-lg hover:shadow-xl transition-shadow',

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User, Building2, Shield, Bell, Key, CreditCard, Save, Eye, EyeOff } from 'lucide-react';
+import { User, Building2, Shield, Bell, Key, CreditCard, Save, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useOrganizations } from '../hooks/useOrganizations';
 import { cn } from '../utils';
@@ -63,8 +63,8 @@ const SettingsPage: React.FC = () => {
           {activeSection === 'organization' && <OrgSection org={activeOrg} />}
           {activeSection === 'security' && <SecuritySection />}
           {activeSection === 'notifications' && <ComingSoon label="Notifications" />}
-          {activeSection === 'api' && <ComingSoon label="API Keys" />}
-          {activeSection === 'billing' && <ComingSoon label="Billing" />}
+          {activeSection === 'api' && <ApiKeysSection />}
+          {activeSection === 'billing' && <BillingRedirectSection navigate={navigate} />}
         </div>
       </div>
     </div>
@@ -338,5 +338,74 @@ const ComingSoon: React.FC<{ label: string }> = ({ label }) => (
     <p className="text-sm text-surface-400">This section is coming soon.</p>
   </div>
 );
+
+const BillingRedirectSection: React.FC<{ navigate: (to: string) => void }> = ({ navigate }) => (
+  <div className="card p-6 max-w-2xl">
+    <h3 className="text-lg font-bold text-surface-900 mb-1">Billing & Subscription</h3>
+    <p className="text-sm text-surface-500 mb-6">Manage your plan, payment methods, and invoices</p>
+    <div className="grid grid-cols-3 gap-4 mb-6">
+      {[
+        { label: 'Current Plan', value: 'Professional', color: 'bg-brand-50 text-brand-700' },
+        { label: 'Next Billing', value: 'Jul 1, 2025', color: 'bg-surface-50 text-surface-700' },
+        { label: 'Monthly Cost', value: '$49/mo', color: 'bg-success-50 text-success-700' },
+      ].map(s => (
+        <div key={s.label} className={`rounded-xl p-4 ${s.color}`}>
+          <p className="text-xs font-semibold opacity-60 mb-1">{s.label}</p>
+          <p className="text-lg font-extrabold">{s.value}</p>
+        </div>
+      ))}
+    </div>
+    <button
+      onClick={() => navigate('/billing')}
+      className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-brand-500/20 hover:-translate-y-0.5"
+    >
+      <CreditCard size={15} /> Manage Billing <ArrowRight size={14} />
+    </button>
+  </div>
+);
+
+const ApiKeysSection: React.FC = () => {
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const keys = [
+    { id: 'key_1', name: 'Production Key', key: 'rfn_prod_sk_4xK8mN2pQvL9wR7tY3uZ', created: 'Apr 16, 2025', lastUsed: '2 hours ago' },
+    { id: 'key_2', name: 'Development Key', key: 'rfn_dev_sk_7bJ5nP1qXsC6eH2yM8dW', created: 'May 3, 2025', lastUsed: 'Never' },
+  ];
+
+  return (
+    <div className="card p-6 max-w-2xl">
+      <h3 className="text-lg font-bold text-surface-900 mb-1">API Keys</h3>
+      <p className="text-sm text-surface-500 mb-6">Use these keys to authenticate requests to the Refinely API</p>
+
+      <div className="space-y-3 mb-6">
+        {keys.map(k => (
+          <div key={k.id} className="p-4 rounded-xl border border-surface-200 bg-surface-50">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <p className="text-sm font-bold text-surface-800">{k.name}</p>
+                <p className="text-xs text-surface-400 mt-0.5">Created {k.created} · Last used {k.lastUsed}</p>
+              </div>
+              <button className="text-xs font-semibold text-danger-500 hover:text-danger-600 transition-colors">Revoke</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs font-mono bg-white border border-surface-200 rounded-lg px-3 py-2 text-surface-600 overflow-hidden">
+                {revealed[k.id] ? k.key : k.key.slice(0, 16) + '••••••••••••••••••••'}
+              </code>
+              <button
+                onClick={() => setRevealed(p => ({ ...p, [k.id]: !p[k.id] }))}
+                className="p-2 rounded-lg text-surface-400 hover:text-surface-700 hover:bg-white border border-surface-200 transition-colors"
+              >
+                <Eye size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <button className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-brand-500/20">
+        + Generate New Key
+      </button>
+    </div>
+  );
+};
 
 export default SettingsPage;

@@ -20,6 +20,9 @@ pandas==2.2.0
 openpyxl==3.1.5
 rapidfuzz==3.10.0
 
-# AI/ML 
+# AI/ML
 scikit-learn==1.5.2
 groq
+
+# Google OAuth
+httpx==0.28.1
