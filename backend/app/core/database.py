@@ -29,6 +29,7 @@ async_engine = create_async_engine(
     settings.ASYNC_DATABASE_URL,
     echo=settings.DEBUG,
     future=True,
+    pool_pre_ping=True,
     connect_args={"ssl": _ssl_module.create_default_context()} if settings.needs_ssl else {},
 )
 

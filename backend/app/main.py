@@ -47,7 +47,7 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
-    """Health check endpoint."""
+    """Health check endpoint — GET and HEAD both accepted (UptimeRobot uses HEAD)."""
     return {"status": "healthy", "app": settings.APP_NAME}
