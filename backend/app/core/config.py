@@ -1,6 +1,10 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
+
+
+_CLOUD_HOSTS = ("neon.tech", ".render.com", "railway.app", "fly.dev")
 
 
 class Settings(BaseSettings):
@@ -16,7 +20,7 @@ class Settings(BaseSettings):
     DB_PORT: int = 5432
     DB_NAME: str = "refinely_db"
 
-    # Full URL override — set by cloud platforms (Neon/Railway/Render/Fly.io)
+    # Full URL override — set by cloud platforms (Neon/Railway/Render)
     DATABASE_URL: Optional[str] = None
 
     @property
@@ -25,21 +29,25 @@ class Settings(BaseSettings):
             f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
-        # Normalize driver prefix (some providers use "postgres://")
+        # Normalize scheme
         url = url.replace("postgres://", "postgresql://", 1)
         url = url.replace("postgresql+asyncpg://", "postgresql://", 1)
         return url
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
+        # Switch to asyncpg driver and STRIP ALL query params.
+        # SSL and auth params are handled via connect_args in database.py
+        # so they never get mixed into the database name (Neon includes
+        # channel_binding=require in its URL which confuses asyncpg).
         url = self.SYNC_DB_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # Normalize SSL param — asyncpg uses ssl=require, not sslmode=require
-        url = url.replace("sslmode=require", "ssl=require")
-        # Force SSL on known cloud hosts that require it
-        cloud_hosts = ("neon.tech", ".render.com", "railway.app", "fly.dev")
-        if any(h in url for h in cloud_hosts) and "ssl=" not in url:
-            url += ("&" if "?" in url else "?") + "ssl=require"
-        return url
+        parsed = urlparse(url)
+        return urlunparse(parsed._replace(query=""))
+
+    @property
+    def needs_ssl(self) -> bool:
+        raw = self.DATABASE_URL or self.SYNC_DB_URL
+        return any(h in raw for h in _CLOUD_HOSTS)
 
     # CORS — comma-separated; extend via ALLOWED_ORIGINS env var in production
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost:5174"
@@ -62,7 +70,6 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Cache settings to avoid reading .env multiple times."""
     return Settings()
 
 
