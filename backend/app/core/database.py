@@ -3,31 +3,42 @@ Database connection and session management.
 Uses SQLAlchemy with async support.
 """
 
+import ssl as _ssl_module
+import asyncpg as _asyncpg
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
+# SQLAlchemy 2.0.35+ passes 'channel_binding' (a libpq-only param) to asyncpg
+# which doesn't support it — patch connect() to silently drop it.
+_orig_connect = _asyncpg.connect
+
+async def _safe_connect(*args, **kwargs):
+    kwargs.pop("channel_binding", None)
+    return await _orig_connect(*args, **kwargs)
+
+_asyncpg.connect = _safe_connect
+
+
 engine = create_engine(settings.SYNC_DB_URL, echo=settings.DEBUG)
 
-# Pass SSL via connect_args rather than the URL query string — asyncpg
-# doesn't accept ssl as a URL param reliably across SQLAlchemy versions.
+# Detect cloud hosts that require SSL
 _cloud_hosts = ("neon.tech", ".render.com", "railway.app", "fly.dev")
-_needs_ssl = any(h in settings.ASYNC_DATABASE_URL for h in _cloud_hosts)
-_connect_args = {"ssl": "require"} if _needs_ssl else {}
+_needs_ssl = any(h in (settings.DATABASE_URL or settings.SYNC_DB_URL) for h in _cloud_hosts)
 
-# Strip ssl/sslmode params from the URL itself to avoid double-handling
+# Strip ssl/sslmode query params from the async URL — SSL is passed via
+# connect_args using an SSLContext object, which asyncpg handles natively
 _async_url = settings.ASYNC_DATABASE_URL
-for _param in ("?ssl=require", "&ssl=require", "?sslmode=require", "&sslmode=require"):
-    _async_url = _async_url.replace(_param, "")
+for _p in ("?ssl=require", "&ssl=require", "?sslmode=require", "&sslmode=require"):
+    _async_url = _async_url.replace(_p, "")
 
 async_engine = create_async_engine(
     _async_url,
     echo=settings.DEBUG,
     future=True,
-    connect_args=_connect_args,
+    connect_args={"ssl": _ssl_module.create_default_context()} if _needs_ssl else {},
 )
-
 
 AsyncSessionLocal = sessionmaker(
     bind=async_engine,
