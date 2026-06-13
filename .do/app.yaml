@@ -1,0 +1,34 @@
+name: refinely-enterprise
+region: nyc
+
+services:
+  - name: refinely-api
+    source_dir: backend
+    github:
+      repo: YOUR_GITHUB_USERNAME/refinely-enterprise   # update this
+      branch: main
+      deploy_on_push: true
+    run_command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    build_command: pip install -r requirements.txt
+    environment_slug: python
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb  # $5/month
+    http_port: 8080
+    health_check:
+      http_path: /health
+    envs:
+      - key: DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        value: "REPLACE_WITH_NEON_URL"
+        type: SECRET
+      - key: SECRET_KEY
+        value: "REPLACE_WITH_RANDOM_64_CHAR_STRING"
+        type: SECRET
+      - key: GROQ_API_KEY
+        value: "REPLACE_WITH_YOUR_GROQ_KEY"
+        type: SECRET
+      - key: GOOGLE_CLIENT_ID
+        value: "322531028402-57r7d6eolojchqjepltabudkgglmr68a.apps.googleusercontent.com"
+      - key: ALLOWED_ORIGINS
+        value: "REPLACE_WITH_VERCEL_URL"
