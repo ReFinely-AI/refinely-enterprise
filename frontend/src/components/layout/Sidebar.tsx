@@ -13,6 +13,7 @@ import {
   LogOut,
   Plus,
   Receipt,
+  X,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,14 +29,19 @@ interface NavItem {
   ai?: boolean;
 }
 
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
 const bottomNav: NavItem[] = [
   { label: 'Billing',  icon: <Receipt size={18} />,    to: '/billing' },
   { label: 'Settings', icon: <Settings size={18} />,   to: '/settings' },
   { label: 'Help',     icon: <HelpCircle size={18} />, to: '/help' },
 ];
 
-const NavLink: React.FC<NavItem & { collapsed?: boolean }> = ({
-  label, icon, to, badge, ai, collapsed,
+const NavLink: React.FC<NavItem & { collapsed?: boolean; onNavigate?: () => void }> = ({
+  label, icon, to, badge, ai, collapsed, onNavigate,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -47,7 +53,7 @@ const NavLink: React.FC<NavItem & { collapsed?: boolean }> = ({
 
   return (
     <button
-      onClick={() => navigate(to)}
+      onClick={() => { navigate(to); onNavigate?.(); }}
       title={collapsed ? label : undefined}
       className={cn(
         'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group relative',
@@ -86,7 +92,7 @@ const NavLink: React.FC<NavItem & { collapsed?: boolean }> = ({
   );
 };
 
-const Sidebar: React.FC = () => {
+const Sidebar: React.FC<SidebarProps> = ({ open = false, onClose }) => {
   const { user, logout, activeOrgId, setActiveOrgId } = useAuth();
   const { organizations } = useOrganizations();
   const navigate = useNavigate();
@@ -98,7 +104,6 @@ const Sidebar: React.FC = () => {
     enabled: !!activeOrgId,
   });
 
-  // Fetch unresolved anomaly count from the most recent reconciliations
   const recentIds = reconciliations.slice(-5).map((r) => r.id);
   const { data: unresolvedAnomalyCount = 0 } = useQuery({
     queryKey: ['sidebarUnresolvedAnomalies', recentIds],
@@ -128,7 +133,13 @@ const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-full flex flex-col bg-white border-r border-surface-200 z-30"
+      className={cn(
+        'fixed left-0 top-0 h-full flex flex-col bg-white border-r border-surface-200 z-30 transition-transform duration-300',
+        // Desktop: always visible
+        'md:translate-x-0',
+        // Mobile: slide in/out based on open prop
+        open ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+      )}
       style={{ width: 'var(--sidebar-width)' }}
     >
       {/* ── Logo ─────────────────────────────────────────────── */}
@@ -137,6 +148,13 @@ const Sidebar: React.FC = () => {
         <span className="text-[17px] font-extrabold text-surface-900 tracking-tight">
           Refinely
         </span>
+        {/* Close button — mobile only */}
+        <button
+          onClick={onClose}
+          className="ml-auto p-1.5 rounded-lg text-surface-400 hover:bg-surface-100 transition-colors md:hidden"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* ── Org Switcher ──────────────────────────────────────── */}
@@ -210,7 +228,7 @@ const Sidebar: React.FC = () => {
           Main Menu
         </p>
         {mainNav.map((item) => (
-          <NavLink key={item.to} {...item} />
+          <NavLink key={item.to} {...item} onNavigate={onClose} />
         ))}
 
         <div className="pt-4">
@@ -218,7 +236,7 @@ const Sidebar: React.FC = () => {
             Account
           </p>
           {bottomNav.map((item) => (
-            <NavLink key={item.to} {...item} />
+            <NavLink key={item.to} {...item} onNavigate={onClose} />
           ))}
         </div>
       </nav>
