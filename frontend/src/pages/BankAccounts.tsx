@@ -15,7 +15,7 @@ const BankAccountsPage: React.FC = () => {
   const { activeOrgId } = useAuth();
   const { organizations } = useOrganizations();
   const qc = useQueryClient();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [error, setError] = useState('');
 
   // form state
@@ -38,7 +38,7 @@ const BankAccountsPage: React.FC = () => {
       reconciliationService.createBankAccount(activeOrgId!, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bankAccounts', activeOrgId] });
-      setDrawerOpen(false);
+      setModalOpen(false);
       resetForm();
     },
     onError: (err: any) => {
@@ -73,7 +73,7 @@ const BankAccountsPage: React.FC = () => {
         actions={
           activeOrgId ? (
             <button
-              onClick={() => setDrawerOpen(true)}
+              onClick={() => setModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md transition-all"
             >
               <Plus size={15} /> Add Bank Account
@@ -112,7 +112,7 @@ const BankAccountsPage: React.FC = () => {
             <p className="text-base font-semibold text-surface-700 mb-2">No bank accounts yet</p>
             <p className="text-sm text-surface-400 mb-5">Add your first bank account to start reconciling.</p>
             <button
-              onClick={() => setDrawerOpen(true)}
+              onClick={() => setModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md"
             >
               <Plus size={14} /> Add Bank Account
@@ -164,19 +164,19 @@ const BankAccountsPage: React.FC = () => {
         )}
       </div>
 
-      {/* ── Add Bank Account Drawer ─────────────────────── */}
-      {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { setDrawerOpen(false); resetForm(); }} />
-          <div className="relative bg-white w-[420px] h-full shadow-xl flex flex-col animate-slide-in-right">
+      {/* ── Add Bank Account Modal ─────────────────────── */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { setModalOpen(false); resetForm(); }} />
+          <div className="relative bg-white rounded-xl shadow-xl w-[480px] max-h-[90vh] flex flex-col animate-slide-up">
             <div className="flex items-center justify-between px-6 py-5 border-b border-surface-200">
               <h2 className="text-lg font-bold text-surface-900">Add Bank Account</h2>
-              <button onClick={() => { setDrawerOpen(false); resetForm(); }} className="text-surface-400 hover:text-surface-700 p-1 rounded-md hover:bg-surface-100">
+              <button onClick={() => { setModalOpen(false); resetForm(); }} className="text-surface-400 hover:text-surface-700 p-1 rounded-md hover:bg-surface-100">
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="flex-1 overflow-y-auto p-6 space-y-5">
+            <form onSubmit={handleCreate} className="overflow-y-auto p-6 space-y-5">
               {error && (
                 <div className="px-4 py-3 rounded-lg bg-danger-50 border border-danger-100 text-danger-600 text-sm">
                   {error}
@@ -220,30 +220,32 @@ const BankAccountsPage: React.FC = () => {
                     className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm placeholder-surface-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Currency</label>
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
-                  >
-                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Currency</label>
+                    <select
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value)}
+                      className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm bg-white focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                    >
+                      {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Date Tolerance (days)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      value={tolerance}
+                      onChange={(e) => setTolerance(Number(e.target.value))}
+                      className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Date Tolerance (days)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={tolerance}
-                    onChange={(e) => setTolerance(Number(e.target.value))}
-                    className="w-full h-10 px-3 rounded-md border border-surface-200 text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all"
-                  />
-                  <p className="text-xs text-surface-400 mt-1.5">
-                    How many days apart two transactions can be to still match
-                  </p>
-                </div>
+                <p className="text-xs text-surface-400 -mt-2">
+                  Date tolerance: how many days apart two transactions can be to still match
+                </p>
                 <div>
                   <label className="block text-[13px] font-medium text-surface-600 mb-1.5">Organization</label>
                   <div className="h-10 px-3 flex items-center rounded-md border border-surface-100 bg-surface-50 text-sm text-surface-600">
@@ -251,25 +253,24 @@ const BankAccountsPage: React.FC = () => {
                   </div>
                 </div>
               </fieldset>
-            </form>
 
-            <div className="px-6 py-4 border-t border-surface-200 flex gap-3">
-              <button
-                type="button"
-                onClick={() => { setDrawerOpen(false); resetForm(); }}
-                className="flex-1 h-10 border border-surface-200 rounded-md text-sm font-medium text-surface-700 hover:bg-surface-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={(e) => handleCreate(e as any)}
-                disabled={createMutation.isPending}
-                className="flex-1 h-10 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-semibold rounded-md transition-colors"
-              >
-                {createMutation.isPending ? 'Saving...' : 'Save Bank Account'}
-              </button>
-            </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setModalOpen(false); resetForm(); }}
+                  className="px-4 py-2 border border-surface-200 rounded-md text-sm font-medium text-surface-700 hover:bg-surface-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-sm font-semibold rounded-md transition-colors"
+                >
+                  {createMutation.isPending ? 'Saving...' : 'Save Bank Account'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

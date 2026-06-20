@@ -131,7 +131,7 @@ const SignUp: React.FC = () => {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Muhammad Nabeel"
+                placeholder="Enter your Name"
                 required
                 className="w-full h-11 pl-10 pr-4 rounded-xl border border-surface-200 bg-white text-sm text-surface-800 placeholder-surface-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 transition-all"
               />

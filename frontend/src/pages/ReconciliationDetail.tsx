@@ -6,6 +6,8 @@ import {
   Sparkles, Send, X, RefreshCcw, FileText, ChevronRight,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { reconciliationService } from '../services/reconciliation';
 import { Anomaly, AnomalySeverity, ResolveAction } from '../types/reconciliation';
 import { cn } from '../utils';
@@ -28,6 +30,63 @@ const SEVERITY_CLS: Record<AnomalySeverity, string> = {
 
 const SEVERITY_DOT: Record<AnomalySeverity, string> = {
   HIGH: 'bg-danger-500', MEDIUM: 'bg-warning-500', LOW: 'bg-[#3B82F6]',
+};
+
+// ── Markdown renderer styled to match the app theme ──────────────
+const markdownComponents = {
+  p: ({ children }: any) => (
+    <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+  ),
+  ul: ({ children }: any) => (
+    <ul className="mb-2 last:mb-0 pl-4 space-y-1 list-disc marker:text-ai-500">{children}</ul>
+  ),
+  ol: ({ children }: any) => (
+    <ol className="mb-2 last:mb-0 pl-4 space-y-1 list-decimal marker:text-ai-500 marker:font-semibold">{children}</ol>
+  ),
+  li: ({ children }: any) => (
+    <li className="pl-1">{children}</li>
+  ),
+  strong: ({ children }: any) => (
+    <strong className="font-semibold text-surface-900">{children}</strong>
+  ),
+  em: ({ children }: any) => (
+    <em className="italic text-surface-700">{children}</em>
+  ),
+  code: ({ children }: any) => (
+    <code className="px-1.5 py-0.5 rounded bg-surface-100 text-ai-700 text-[13px] font-mono">{children}</code>
+  ),
+  h1: ({ children }: any) => (
+    <h1 className="text-base font-bold text-surface-900 mt-3 mb-1.5 first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }: any) => (
+    <h2 className="text-[15px] font-bold text-surface-900 mt-3 mb-1.5 first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }: any) => (
+    <h3 className="text-sm font-bold text-surface-800 mt-2 mb-1 first:mt-0">{children}</h3>
+  ),
+  hr: () => <hr className="my-3 border-surface-200" />,
+  a: ({ href, children }: any) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700 underline underline-offset-2">
+      {children}
+    </a>
+  ),
+  table: ({ children }: any) => (
+    <div className="overflow-x-auto my-2 rounded-lg border border-surface-200">
+      <table className="w-full text-xs">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: any) => (
+    <thead className="bg-surface-50">{children}</thead>
+  ),
+  th: ({ children }: any) => (
+    <th className="px-3 py-2 text-left font-semibold text-surface-600 border-b border-surface-200">{children}</th>
+  ),
+  td: ({ children }: any) => (
+    <td className="px-3 py-2 text-surface-700 border-b border-surface-100">{children}</td>
+  ),
+  blockquote: ({ children }: any) => (
+    <blockquote className="border-l-2 border-ai-300 pl-3 my-2 text-surface-500 italic">{children}</blockquote>
+  ),
 };
 
 const ReconciliationDetail: React.FC = () => {
@@ -513,11 +572,17 @@ const ReconciliationDetail: React.FC = () => {
                         className={cn(
                           'px-4 py-3 text-sm leading-relaxed',
                           msg.role === 'user'
-                            ? 'bg-brand-500 text-white rounded-[16px_16px_4px_16px]'
+                            ? 'bg-brand-500 text-white rounded-[16px_16px_4px_16px] whitespace-pre-wrap'
                             : 'bg-white border border-surface-200 text-surface-700 rounded-[16px_16px_16px_4px] border-l-[3px] border-l-ai-500',
                         )}
                       >
-                        {msg.text}
+                        {msg.role === 'ai' ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {msg.text}
+                          </ReactMarkdown>
+                        ) : (
+                          msg.text
+                        )}
                       </div>
                       {msg.action && (
                         <div className="bg-ai-50 border border-ai-200 rounded-md p-3">

@@ -40,8 +40,23 @@ You MUST return a JSON object that matches this EXACT structure:
   "suggested_action": null
 }}
 
+FORMATTING RULES FOR THE "message" FIELD (MANDATORY):
+The "message" string MUST use proper Markdown syntax — never write plain unformatted sentences strung together.
+- When listing multiple anomalies or items, use a numbered Markdown list, one item per line, like:
+  1. **Possible Duplicate Ledger Entry** (Severity: Medium) — Matches entry #342 exactly: Amount 500.0 on 2026-03-15.
+  2. **Timing Gap of 8 Days** (Severity: Medium) — Bank: 2026-03-20 | Ledger: 2026-03-12.
+- Always bold the anomaly title or key label using **double asterisks**.
+- Put each anomaly/point on its own line — never merge multiple items into one paragraph.
+- Use a blank line between the intro sentence and the list.
+- If you reference specific numbers (amounts, dates, scores), keep them inline but bolded labels like **Amount:**, **Severity:**, **Score:** where relevant.
+- For a short summary with no list items, plain sentences are fine — only use lists when there are 2 or more distinct points/anomalies/items to present.
+- Never output one giant run-on paragraph when multiple anomalies are being described — always break them into a list.
+
+EXAMPLE of CORRECT "message" formatting:
+"I found 4 unresolved anomalies in this reconciliation:\\n\\n1. **Possible Duplicate Ledger Entry** (Severity: Medium) — Matches entry #342 exactly: Amount 500.0 on 2026-03-15.\\n2. **Timing Gap of 8 Days** (Severity: Medium) — Bank: 2026-03-20 | Ledger: 2026-03-12.\\n3. **Unmatched High-Value Transaction** (Severity: High) — A large bank movement of -8500.0 is missing from the ledger.\\n4. **Statistical Anomaly Detected** (Severity: Medium) — Transaction of 1200.0 on day 20 deviates from historical patterns (Score: -0.01).\\n\\nWould you like me to suggest a resolution for any of these?"
+
 RULES FOR VALUES:
-1. "message": MUST be a single string. Do NOT create nested objects or arrays here.
+1. "message": MUST be a single string. Do NOT create nested objects or arrays here. Use \\n for line breaks within the string as shown in the example.
 2. "suggested_action": 
    - Return null if the user is asking for a general summary or feedback on MULTIPLE anomalies.
    - ONLY return a JSON object (e.g., {{"action": "create_journal_entry", "amount": 8500, "anomaly_id": 3}}) if the user is asking how to fix ONE SPECIFIC anomaly.

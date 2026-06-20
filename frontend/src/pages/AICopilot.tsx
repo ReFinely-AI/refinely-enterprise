@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Sparkles, Send, RefreshCcw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { reconciliationService } from '../services/reconciliation';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from '../components/layout/PageHeader';
@@ -18,6 +20,63 @@ const QUICK_PROMPTS = [
   'What are the common anomaly patterns?',
   'How can I improve my match rate?',
 ];
+
+// ── Markdown renderer styled to match the app theme ──────────────
+const markdownComponents = {
+  p: ({ children }: any) => (
+    <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+  ),
+  ul: ({ children }: any) => (
+    <ul className="mb-2 last:mb-0 pl-4 space-y-1 list-disc marker:text-ai-500">{children}</ul>
+  ),
+  ol: ({ children }: any) => (
+    <ol className="mb-2 last:mb-0 pl-4 space-y-1 list-decimal marker:text-ai-500 marker:font-semibold">{children}</ol>
+  ),
+  li: ({ children }: any) => (
+    <li className="pl-1">{children}</li>
+  ),
+  strong: ({ children }: any) => (
+    <strong className="font-semibold text-surface-900">{children}</strong>
+  ),
+  em: ({ children }: any) => (
+    <em className="italic text-surface-700">{children}</em>
+  ),
+  code: ({ children }: any) => (
+    <code className="px-1.5 py-0.5 rounded bg-surface-100 text-ai-700 text-[13px] font-mono">{children}</code>
+  ),
+  h1: ({ children }: any) => (
+    <h1 className="text-base font-bold text-surface-900 mt-3 mb-1.5 first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }: any) => (
+    <h2 className="text-[15px] font-bold text-surface-900 mt-3 mb-1.5 first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }: any) => (
+    <h3 className="text-sm font-bold text-surface-800 mt-2 mb-1 first:mt-0">{children}</h3>
+  ),
+  hr: () => <hr className="my-3 border-surface-200" />,
+  a: ({ href, children }: any) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:text-brand-700 underline underline-offset-2">
+      {children}
+    </a>
+  ),
+  table: ({ children }: any) => (
+    <div className="overflow-x-auto my-2 rounded-lg border border-surface-200">
+      <table className="w-full text-xs">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: any) => (
+    <thead className="bg-surface-50">{children}</thead>
+  ),
+  th: ({ children }: any) => (
+    <th className="px-3 py-2 text-left font-semibold text-surface-600 border-b border-surface-200">{children}</th>
+  ),
+  td: ({ children }: any) => (
+    <td className="px-3 py-2 text-surface-700 border-b border-surface-100">{children}</td>
+  ),
+  blockquote: ({ children }: any) => (
+    <blockquote className="border-l-2 border-ai-300 pl-3 my-2 text-surface-500 italic">{children}</blockquote>
+  ),
+};
 
 const AICopilotPage: React.FC = () => {
   const { activeOrgId } = useAuth();
@@ -47,7 +106,6 @@ const AICopilotPage: React.FC = () => {
 
     try {
       if (!selectedReconId && reconciliations.length > 0) {
-        // Use latest reconciliation as context
         const latestId = reconciliations[reconciliations.length - 1].id;
         setSelectedReconId(latestId);
         const res = await reconciliationService.copilotChat({ reconciliation_id: latestId, message: msg });
@@ -67,17 +125,19 @@ const AICopilotPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-surface-50">
-      <PageHeader
-        title="AI Copilot"
-        subtitle="Powered by Llama 3.1 via Groq"
-      />
+    <div className="flex flex-col h-screen bg-surface-50 overflow-hidden">
+      <div className="flex-shrink-0">
+        <PageHeader
+          title="AI Copilot"
+          subtitle="Powered by Llama 3.1 via Groq"
+        />
+      </div>
 
-      <div className="flex-1 flex gap-5 p-8 min-h-0">
+      <div className="flex-1 flex gap-5 p-8 min-h-0 overflow-hidden">
         {/* Main Chat */}
-        <div className="flex-1 card flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+        <div className="flex-1 card flex flex-col overflow-hidden min-h-0">
           {/* Chat Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100 flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ai-500 to-[#6366F1] flex items-center justify-center shadow-md">
                 <Sparkles size={16} className="text-white" />
@@ -112,8 +172,8 @@ const AICopilotPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Messages — only this area scrolls */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0">
             {messages.map((msg, i) => (
               <div key={i} className={cn('flex', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                 <div className="max-w-[72%] space-y-2">
@@ -124,13 +184,19 @@ const AICopilotPage: React.FC = () => {
                   )}
                   <div
                     className={cn(
-                      'px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
+                      'px-4 py-3 text-sm leading-relaxed',
                       msg.role === 'user'
-                        ? 'bg-brand-500 text-white rounded-[16px_16px_4px_16px]'
+                        ? 'bg-brand-500 text-white rounded-[16px_16px_4px_16px] whitespace-pre-wrap'
                         : 'bg-white border border-surface-200 text-surface-700 rounded-[16px_16px_16px_4px] border-l-[3px] border-l-ai-500 shadow-xs',
                     )}
                   >
-                    {msg.text}
+                    {msg.role === 'ai' ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                        {msg.text}
+                      </ReactMarkdown>
+                    ) : (
+                      msg.text
+                    )}
                   </div>
                   {msg.action && (
                     <div className="bg-ai-50 border border-ai-200 rounded-lg p-4">
@@ -171,8 +237,8 @@ const AICopilotPage: React.FC = () => {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Quick prompts */}
-          <div className="px-6 pt-3 border-t border-surface-100 flex gap-2 flex-wrap">
+          {/* Quick prompts — always visible, never scrolls away */}
+          <div className="px-6 pt-3 pb-1 border-t border-surface-100 flex gap-2 flex-wrap flex-shrink-0">
             {QUICK_PROMPTS.map((p) => (
               <button
                 key={p}
@@ -184,8 +250,8 @@ const AICopilotPage: React.FC = () => {
             ))}
           </div>
 
-          {/* Input */}
-          <div className="p-4 flex items-end gap-2">
+          {/* Input — always visible, never scrolls away */}
+          <div className="p-4 pt-3 flex items-end gap-2 flex-shrink-0">
             <textarea
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
@@ -202,13 +268,13 @@ const AICopilotPage: React.FC = () => {
               <Send size={16} />
             </button>
           </div>
-          <p className="px-6 pb-4 text-[11px] text-surface-400">
+          <p className="px-6 pb-3 text-[11px] text-surface-400 flex-shrink-0">
             AI may make mistakes. Always verify before applying actions.
           </p>
         </div>
 
         {/* Context Sidebar */}
-        <div className="w-72 space-y-4">
+        <div className="w-72 space-y-4 overflow-y-auto">
           <div className="card p-5">
             <p className="text-[11px] uppercase tracking-widest font-semibold text-surface-400 mb-4">Recent Reconciliations</p>
             {reconciliations.length === 0 ? (

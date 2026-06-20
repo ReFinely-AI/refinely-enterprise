@@ -15,6 +15,7 @@ import { useOrganizations } from '../hooks/useOrganizations';
 import { format, parseISO } from 'date-fns';
 import PageHeader from '../components/layout/PageHeader';
 import NewReconciliationDialog from '../components/NewReconciliationDialog';
+import SetupRequiredDialog from '../components/SetupRequiredDialog';
 import { cn } from '../utils';
 
 const CHART_DATA = [
@@ -48,8 +49,9 @@ const PKR = (n: number) =>
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { activeOrgId } = useAuth();
-  useOrganizations();
+  const { organizations } = useOrganizations();
   const [openNewRecon, setOpenNewRecon] = useState(false);
+  const [setupDialog, setSetupDialog] = useState<'no-org' | 'no-bank-account' | null>(null);
   const [period, setPeriod] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
   const { data: reconciliations = [], isLoading: reconLoading } = useQuery({
@@ -63,6 +65,18 @@ const Dashboard: React.FC = () => {
     queryFn: () => reconciliationService.getBankAccounts(activeOrgId!),
     enabled: !!activeOrgId,
   });
+
+  const handleNewReconClick = () => {
+    if (organizations.length === 0) {
+      setSetupDialog('no-org');
+      return;
+    }
+    if (bankAccounts.length === 0) {
+      setSetupDialog('no-bank-account');
+      return;
+    }
+    setOpenNewRecon(true);
+  };
 
   const totalRecons = reconciliations.length;
   const activeAnomalies = reconciliations.reduce((s, r) => s + (r.anomaly_count || 0), 0);
@@ -87,9 +101,8 @@ const Dashboard: React.FC = () => {
         subtitle={dateLabel}
         actions={
           <button
-            onClick={() => setOpenNewRecon(true)}
-            disabled={bankAccounts.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-sm font-semibold rounded-md transition-all"
+            onClick={handleNewReconClick}
+            className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md transition-all"
           >
             <Plus size={15} /> New Reconciliation
           </button>
@@ -249,9 +262,8 @@ const Dashboard: React.FC = () => {
               <p className="text-base font-semibold text-surface-700 mb-1">No reconciliations yet</p>
               <p className="text-sm text-surface-400 mb-5">Create your first reconciliation to get started.</p>
               <button
-                onClick={() => setOpenNewRecon(true)}
-                disabled={bankAccounts.length === 0}
-                className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white text-sm font-semibold rounded-md"
+                onClick={handleNewReconClick}
+                className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold rounded-md"
               >
                 <Plus size={14} /> New Reconciliation
               </button>
@@ -333,6 +345,12 @@ const Dashboard: React.FC = () => {
         bankAccounts={bankAccounts}
         onClose={() => setOpenNewRecon(false)}
         onCreated={(r) => { setOpenNewRecon(false); navigate(`/reconciliations/${r.id}`); }}
+      />
+
+      <SetupRequiredDialog
+        open={setupDialog !== null}
+        reason={setupDialog ?? 'no-org'}
+        onClose={() => setSetupDialog(null)}
       />
     </div>
   );
