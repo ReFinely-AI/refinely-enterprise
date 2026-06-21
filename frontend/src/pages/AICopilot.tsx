@@ -320,4 +320,4 @@ const AICopilotPage: React.FC = () => {
   );
 };
 
-export default AICopilotPage;
+export default AICopilotPage;  
