@@ -622,7 +622,7 @@ const ReconciliationDetail: React.FC = () => {
 
               {/* Quick prompts */}
               <div className="px-5 pt-3 border-t border-surface-100 flex gap-2 flex-wrap">
-                {['My name in Fizza', "What's unmatched?", 'Help me export'].map((p) => (
+                {['Show all anomalies', "What's unmatched?", 'Help me export'].map((p) => (
                   <button
                     key={p}
                     onClick={() => { setChatInput(p); }}
